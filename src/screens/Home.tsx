@@ -3,9 +3,26 @@ import { publicClient } from "../blockchain/client";
 import { decryptData, encryptData } from "../utils/crypto";
 import { useNavigate } from "react-router-dom";
 import goodVibeLogo from "../assets/good-vibe-logo.png";
+import { getUser, createInvite } from "../blockchain/daoUsers";
+import { createWalletClientFromPrivateKey } from "../blockchain/client";
+import daoUsersAddress from "../blockchain/addresses/DAOUsers.json";
 
-const IPFS_ADD = import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "add";
 const IPFS_CAT = import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "cat/";
+
+// Статусы пользователя в DAO
+const UserStatus = {
+  None: 0,
+  Pending: 1,
+  Active: 2,
+  Inactive: 3,
+} as const;
+
+const UserStatusLabels = {
+  [UserStatus.None]: "Не зарегистрирован",
+  [UserStatus.Pending]: "Ожидает подтверждения",
+  [UserStatus.Active]: "Активный",
+  [UserStatus.Inactive]: "Неактивный",
+} as const;
 
 export default function Home() {
   const [user, setUser] = useState<{
@@ -20,8 +37,18 @@ export default function Home() {
   const [loadingAvatar, setLoadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const [daoUser, setDaoUser] = useState<any>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [privKeyCopied, setPrivKeyCopied] = useState(false);
+  let privateKey: string | undefined = undefined;
+  if (user) privateKey = (user as any).privateKey;
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteAddress, setInviteAddress] = useState("");
+  const [daoUserQueryAddress, setDaoUserQueryAddress] = useState<string>("");
 
   useEffect(() => {
+    console.log("[Home] useEffect стартовал");
     const encrypted = localStorage.getItem("goodvibe_userdata");
     const pin = localStorage.getItem("goodvibe_pin");
     if (!encrypted || !pin) {
@@ -33,6 +60,7 @@ export default function Home() {
       try {
         const decrypted = await decryptData(encrypted, pin);
         const data = JSON.parse(decrypted);
+        console.log("[Home] Данные пользователя расшифрованы:", data);
         setUser(data);
         if (data.avatarHash) {
           setLoadingAvatar(true);
@@ -79,6 +107,31 @@ export default function Home() {
       }
     })();
   }, []);
+
+  // Новый useEffect для запроса к DAOUsers
+  useEffect(() => {
+    if (!user) return;
+    try {
+      if (!user.address.startsWith("0x"))
+        throw new Error("Адрес пользователя должен начинаться с 0x");
+      setDaoUserQueryAddress(user.address);
+      console.log(
+        "[Home] Запрашиваем данные пользователя для адреса:",
+        user.address
+      );
+      (async () => {
+        const data = await getUser(user.address as `0x${string}`);
+        console.log("[Home] Получены данные пользователя из контракта:", data);
+        setDaoUser(data);
+      })();
+    } catch (e) {
+      console.error(
+        "[Home] Ошибка получения данных пользователя из контракта:",
+        e
+      );
+      setDaoUser(null);
+    }
+  }, [user]);
 
   const handleCopy = async () => {
     if (user) {
@@ -161,6 +214,33 @@ export default function Home() {
     setLoadingAvatar(false);
   };
 
+  const handleCreateInvite = async () => {
+    setInviteError("");
+    if (!inviteAddress) return;
+    if (!inviteAddress.startsWith("0x")) {
+      setInviteError("Адрес должен начинаться с 0x");
+      return;
+    }
+    setInviteLoading(true);
+    try {
+      const encrypted = localStorage.getItem("goodvibe_userdata");
+      const pin = localStorage.getItem("goodvibe_pin");
+      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
+      const decrypted = await decryptData(encrypted, pin);
+      const userData = JSON.parse(decrypted);
+      const walletClient = createWalletClientFromPrivateKey(
+        userData.privateKey
+      );
+      await createInvite(walletClient, inviteAddress as `0x${string}`);
+      alert("Приглашение успешно создано!");
+      setShowInviteModal(false);
+      setInviteAddress("");
+    } catch (e: any) {
+      setInviteError(e.message || "Ошибка создания приглашения");
+    }
+    setInviteLoading(false);
+  };
+
   if (error) {
     return (
       <div style={{ color: "red", textAlign: "center", marginTop: 40 }}>
@@ -185,6 +265,26 @@ export default function Home() {
       }}
     >
       <h2 style={{ color: "#222" }}>Главная</h2>
+      <div
+        style={{
+          background: "#f7f7ff",
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 16,
+        }}
+      >
+        <b>Контракты:</b>
+        <div style={{ fontSize: 14, marginTop: 4 }}>
+          DAOUsers:{" "}
+          <span style={{ fontFamily: "monospace" }}>
+            {daoUsersAddress.address}
+          </span>
+        </div>
+        <div style={{ fontSize: 13, marginTop: 8, color: "#888" }}>
+          <b>Адрес для запроса пользователя:</b>{" "}
+          <span style={{ fontFamily: "monospace" }}>{daoUserQueryAddress}</span>
+        </div>
+      </div>
       <div
         style={{
           display: "flex",
@@ -313,6 +413,163 @@ export default function Home() {
       <p>
         <b>Баланс:</b> {balance}
       </p>
+      {user && privateKey && (
+        <button
+          onClick={async () => {
+            await navigator.clipboard.writeText(privateKey!);
+            setPrivKeyCopied(true);
+            setTimeout(() => setPrivKeyCopied(false), 1200);
+          }}
+          style={{
+            width: "100%",
+            marginTop: 8,
+            padding: 10,
+            background: "#e6e6ff",
+            color: "#222",
+            border: "none",
+            borderRadius: 8,
+            fontWeight: 600,
+            fontSize: 15,
+            cursor: "pointer",
+          }}
+        >
+          {privKeyCopied ? "Скопировано!" : "Приватный ключ"}
+        </button>
+      )}
+      {daoUser && (
+        <div
+          style={{
+            margin: "16px 0",
+            background: "#f7f7ff",
+            borderRadius: 8,
+            padding: 12,
+          }}
+        >
+          <div>
+            <b>Имя (из DAO):</b> {daoUser[0]}
+          </div>
+          <div>
+            <b>Адрес:</b> {daoUser[1]}
+          </div>
+          <div>
+            <b>Статус:</b>{" "}
+            {UserStatusLabels[daoUser[2] as keyof typeof UserStatusLabels] ||
+              daoUser[2]}
+          </div>
+          <div>
+            <b>Активность:</b> {daoUser[3]}
+          </div>
+          <div>
+            <b>Уровень:</b> {daoUser[4]}
+          </div>
+          <div>
+            <b>Пригласивший:</b> {daoUser[5]}
+          </div>
+        </div>
+      )}
+      {daoUser && daoUser[2] === UserStatus.Active && (
+        <button
+          onClick={() => setShowInviteModal(true)}
+          style={{
+            width: "100%",
+            marginTop: 16,
+            padding: 12,
+            background: "#e6e6ff",
+            color: "#222",
+            border: "none",
+            borderRadius: 8,
+            fontWeight: 600,
+            fontSize: 16,
+            cursor: "pointer",
+          }}
+        >
+          Создать приглашение
+        </button>
+      )}
+      {showInviteModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              padding: 24,
+              borderRadius: 12,
+              width: "90%",
+              maxWidth: 400,
+            }}
+          >
+            <h3 style={{ margin: "0 0 16px 0" }}>Создание приглашения</h3>
+            <input
+              type="text"
+              value={inviteAddress}
+              onChange={(e) => setInviteAddress(e.target.value)}
+              placeholder="Введите адрес (0x...)"
+              style={{
+                width: "100%",
+                padding: 10,
+                marginBottom: 16,
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                fontSize: 15,
+              }}
+            />
+            {inviteError && (
+              <div style={{ color: "red", marginBottom: 16 }}>
+                {inviteError}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 12 }}>
+              <button
+                onClick={() => {
+                  setShowInviteModal(false);
+                  setInviteError("");
+                  setInviteAddress("");
+                }}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  background: "#eee",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor: "pointer",
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleCreateInvite}
+                disabled={inviteLoading || !inviteAddress}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  background: "#e6e6ff",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor:
+                    inviteLoading || !inviteAddress ? "not-allowed" : "pointer",
+                  opacity: inviteLoading || !inviteAddress ? 0.7 : 1,
+                }}
+              >
+                {inviteLoading ? "Создание..." : "Создать"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <button
         onClick={handleLogout}
         style={{

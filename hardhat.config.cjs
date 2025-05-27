@@ -3,7 +3,7 @@ require("@nomicfoundation/hardhat-toolbox");
 
 console.log("RPC", process.env.VITE_GOODVIBE_CHAIN_RPC_WITH_CREDENTIALS);
 
-const privateKeyFounder = process.env.FOUNDER_PKEY;
+const privateKeyFounder = process.env.TEST_FOUNDER_PKEY;
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {

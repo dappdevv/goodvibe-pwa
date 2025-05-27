@@ -1,4 +1,6 @@
 import { type Chain, createPublicClient, http, defineChain } from "viem";
+import { createWalletClient } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
 // Определяем кастомную сеть GoodVibe
 export const GoodVibeChain = defineChain({
@@ -33,3 +35,13 @@ export const publicClient = createPublicClient({
   chain: GoodVibeChain,
   transport,
 });
+
+// Функция для создания walletClient по приватному ключу
+export function createWalletClientFromPrivateKey(hexPrivateKey: string) {
+  const account = privateKeyToAccount(`0x${hexPrivateKey}`);
+  return createWalletClient({
+    account,
+    chain: GoodVibeChain,
+    transport,
+  });
+}
