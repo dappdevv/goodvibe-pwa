@@ -14,7 +14,10 @@ export default function SessionPin() {
       return;
     }
     // Проверяем пин-код: пробуем расшифровать данные
-    const encrypted = localStorage.getItem("goodvibe_userdata");
+    const sessionId = localStorage.getItem("goodvibe_session_id");
+    const encrypted = sessionId
+      ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
+      : null;
     if (!encrypted) {
       setError("Нет данных сессии");
       return;

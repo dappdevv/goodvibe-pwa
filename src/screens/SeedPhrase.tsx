@@ -34,7 +34,7 @@ export default function SeedPhrase() {
     // Шифруем и сохраняем
     if (pin) {
       encryptData(JSON.stringify(userData), pin).then((enc) => {
-        localStorage.setItem("goodvibe_userdata", enc);
+        localStorage.setItem(`goodvibe_userdata_${account.address}`, enc);
         // Добавляем сессию в список
         const sessionsRaw = localStorage.getItem("goodvibe_sessions");
         let sessions: { id: string; name: string; created: string }[] = [];

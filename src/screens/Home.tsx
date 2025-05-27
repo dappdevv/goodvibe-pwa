@@ -6,6 +6,9 @@ import goodVibeLogo from "../assets/good-vibe-logo.png";
 import { getUser, createInvite } from "../blockchain/daoUsers";
 import { createWalletClientFromPrivateKey } from "../blockchain/client";
 import daoUsersAddress from "../blockchain/addresses/DAOUsers.json";
+import { mnemonicToAccount } from "viem/accounts";
+import { parseEther, isAddress, type Address } from "viem";
+import DAOUsersAbi from "../blockchain/abi/DAOUsers.json";
 
 const IPFS_CAT = import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "cat/";
 
@@ -46,10 +49,26 @@ export default function Home() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteAddress, setInviteAddress] = useState("");
   const [daoUserQueryAddress, setDaoUserQueryAddress] = useState<string>("");
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importSeed, setImportSeed] = useState<string[]>(Array(12).fill(""));
+  const [importError, setImportError] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [sendTo, setSendTo] = useState("");
+  const [sendAmount, setSendAmount] = useState("");
+  const [sendError, setSendError] = useState("");
+  const [sendLoading, setSendLoading] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [registerName, setRegisterName] = useState("");
+  const [registerError, setRegisterError] = useState("");
+  const [registerLoading, setRegisterLoading] = useState(false);
 
   useEffect(() => {
     console.log("[Home] useEffect стартовал");
-    const encrypted = localStorage.getItem("goodvibe_userdata");
+    const sessionId = localStorage.getItem("goodvibe_session_id");
+    const encrypted = sessionId
+      ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
+      : null;
     const pin = localStorage.getItem("goodvibe_pin");
     if (!encrypted || !pin) {
       setError("Нет данных пользователя или пин-кода");
@@ -189,16 +208,19 @@ export default function Home() {
         return;
       }
       if (data.Hash) {
-        const encrypted = localStorage.getItem("goodvibe_userdata");
-        const pin = localStorage.getItem("goodvibe_pin");
-        if (encrypted && pin) {
-          const decrypted = await decryptData(encrypted, pin);
-          const userData = JSON.parse(decrypted);
-          userData.avatarHash = data.Hash;
-          const newEnc = await encryptData(JSON.stringify(userData), pin);
-          localStorage.setItem("goodvibe_userdata", newEnc);
-          setUser({ ...userData });
-          setAvatarUrl(URL.createObjectURL(file));
+        const sessionId = localStorage.getItem("goodvibe_session_id");
+        if (sessionId) {
+          const encrypted = localStorage.getItem("goodvibe_userdata");
+          const pin = localStorage.getItem("goodvibe_pin");
+          if (encrypted && pin) {
+            const decrypted = await decryptData(encrypted, pin);
+            const userData = JSON.parse(decrypted);
+            userData.avatarHash = data.Hash;
+            const newEnc = await encryptData(JSON.stringify(userData), pin);
+            localStorage.setItem(`goodvibe_userdata_${sessionId}`, newEnc);
+            setUser({ ...userData });
+            setAvatarUrl(URL.createObjectURL(file));
+          }
         }
       } else {
         console.error("IPFS ответ не содержит Hash:", data);
@@ -223,7 +245,10 @@ export default function Home() {
     }
     setInviteLoading(true);
     try {
-      const encrypted = localStorage.getItem("goodvibe_userdata");
+      const sessionId = localStorage.getItem("goodvibe_session_id");
+      const encrypted = sessionId
+        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
+        : null;
       const pin = localStorage.getItem("goodvibe_pin");
       if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
       const decrypted = await decryptData(encrypted, pin);
@@ -236,7 +261,13 @@ export default function Home() {
       setShowInviteModal(false);
       setInviteAddress("");
     } catch (e: any) {
-      setInviteError(e.message || "Ошибка создания приглашения");
+      console.error(e);
+      setInviteError(
+        e?.shortMessage ||
+          e?.message ||
+          JSON.stringify(e) ||
+          "Ошибка создания приглашения"
+      );
     }
     setInviteLoading(false);
   };
@@ -412,6 +443,22 @@ export default function Home() {
       </p>
       <p>
         <b>Баланс:</b> {balance}
+        <button
+          onClick={() => setShowSendModal(true)}
+          style={{
+            marginLeft: 12,
+            padding: "4px 12px",
+            background: "#e6e6ff",
+            color: "#222",
+            border: "none",
+            borderRadius: 6,
+            fontWeight: 600,
+            fontSize: 14,
+            cursor: "pointer",
+          }}
+        >
+          Отправить
+        </button>
       </p>
       {user && privateKey && (
         <button
@@ -484,6 +531,25 @@ export default function Home() {
           }}
         >
           Создать приглашение
+        </button>
+      )}
+      {daoUser && daoUser[2] === UserStatus.None && (
+        <button
+          onClick={() => setShowRegisterModal(true)}
+          style={{
+            width: "100%",
+            marginTop: 16,
+            padding: 12,
+            background: "#e6e6ff",
+            color: "#222",
+            border: "none",
+            borderRadius: 8,
+            fontWeight: 600,
+            fontSize: 16,
+            cursor: "pointer",
+          }}
+        >
+          Зарегистрироваться
         </button>
       )}
       {showInviteModal && (
@@ -570,6 +636,154 @@ export default function Home() {
           </div>
         </div>
       )}
+      {showRegisterModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              padding: 24,
+              borderRadius: 12,
+              width: "90%",
+              maxWidth: 400,
+            }}
+          >
+            <h3 style={{ margin: "0 0 16px 0" }}>Регистрация пользователя</h3>
+            <input
+              type="text"
+              value={registerName}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^a-zA-Zа-яА-Я0-9]/g, "");
+                setRegisterName(val);
+              }}
+              placeholder="Имя пользователя"
+              minLength={3}
+              maxLength={42}
+              style={{
+                width: "100%",
+                padding: 10,
+                marginBottom: 12,
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                fontSize: 15,
+              }}
+              autoComplete="off"
+            />
+            {registerError && (
+              <div style={{ color: "red", marginBottom: 12 }}>
+                {registerError}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 12 }}>
+              <button
+                onClick={() => {
+                  setShowRegisterModal(false);
+                  setRegisterName("");
+                  setRegisterError("");
+                }}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  background: "#eee",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor: "pointer",
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={async () => {
+                  if (registerName.length < 3) {
+                    setRegisterError("Минимум 3 символа");
+                    return;
+                  }
+                  if (registerName.length > 42) {
+                    setRegisterError("Максимум 42 символа");
+                    return;
+                  }
+                  if (/[^a-zA-Zа-яА-Я0-9]/.test(registerName)) {
+                    setRegisterError(
+                      "Только буквы и цифры, без пробелов и спецсимволов"
+                    );
+                    return;
+                  }
+                  setRegisterError("");
+                  setRegisterLoading(true);
+                  try {
+                    const sessionId = localStorage.getItem(
+                      "goodvibe_session_id"
+                    );
+                    const encrypted = sessionId
+                      ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
+                      : null;
+                    const pin = localStorage.getItem("goodvibe_pin");
+                    if (!encrypted || !pin)
+                      throw new Error("Нет доступа к приватному ключу");
+                    const decrypted = await decryptData(encrypted, pin);
+                    const userData = JSON.parse(decrypted);
+                    const walletClient = createWalletClientFromPrivateKey(
+                      userData.privateKey
+                    );
+                    const hash = await walletClient.writeContract({
+                      address: daoUsersAddress.address as Address,
+                      abi: DAOUsersAbi,
+                      functionName: "registerUser",
+                      args: [registerName],
+                      chain: walletClient.chain,
+                      account: walletClient.account ?? null,
+                    });
+                    setShowRegisterModal(false);
+                    setRegisterName("");
+                    setRegisterError("");
+                    alert(`Регистрация отправлена!\nHash: ${hash}`);
+                    // Обновить данные пользователя после регистрации
+                    if (userData.address) {
+                      const updated = await getUser(userData.address);
+                      setDaoUser(updated);
+                    }
+                  } catch (e: any) {
+                    console.error(e);
+                    setRegisterError(
+                      e?.shortMessage ||
+                        e?.message ||
+                        JSON.stringify(e) ||
+                        "Ошибка регистрации"
+                    );
+                  }
+                  setRegisterLoading(false);
+                }}
+                disabled={registerLoading}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  background: "#e6e6ff",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor: registerLoading ? "not-allowed" : "pointer",
+                  opacity: registerLoading ? 0.7 : 1,
+                }}
+              >
+                {registerLoading ? "Регистрация..." : "Зарегистрироваться"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <button
         onClick={handleLogout}
         style={{
@@ -587,6 +801,315 @@ export default function Home() {
       >
         Завершить сеанс
       </button>
+      <button
+        onClick={() => setShowImportModal(true)}
+        style={{
+          width: "100%",
+          marginTop: 16,
+          padding: 12,
+          background: "#e6e6ff",
+          color: "#222",
+          border: "none",
+          borderRadius: 8,
+          fontWeight: 600,
+          fontSize: 16,
+          cursor: "pointer",
+        }}
+      >
+        Импорт кошелька
+      </button>
+      {showImportModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              padding: 24,
+              borderRadius: 12,
+              width: "90%",
+              maxWidth: 400,
+            }}
+          >
+            <h3 style={{ margin: "0 0 16px 0" }}>Импорт кошелька</h3>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {importSeed.map((word, idx) => (
+                <input
+                  key={idx}
+                  type="text"
+                  value={word}
+                  onChange={(e) => {
+                    const arr = [...importSeed];
+                    arr[idx] = e.target.value.trim().toLowerCase();
+                    setImportSeed(arr);
+                  }}
+                  placeholder={`Слово ${idx + 1}`}
+                  style={{
+                    width: "30%",
+                    marginBottom: 8,
+                    padding: 6,
+                    border: "1px solid #ddd",
+                    borderRadius: 6,
+                    fontSize: 14,
+                  }}
+                  autoComplete="off"
+                />
+              ))}
+            </div>
+            {importError && (
+              <div style={{ color: "red", margin: "8px 0" }}>{importError}</div>
+            )}
+            <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportError("");
+                  setImportSeed(Array(12).fill(""));
+                }}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  background: "#eee",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor: "pointer",
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={async () => {
+                  setImportError("");
+                  setImportLoading(true);
+                  const phrase = importSeed.join(" ").trim();
+                  if (importSeed.some((w) => !w)) {
+                    setImportError("Введите все 12 слов");
+                    setImportLoading(false);
+                    return;
+                  }
+                  try {
+                    const account = mnemonicToAccount(phrase);
+                    const privKey = account.getHdKey().privateKey;
+                    let hexPrivKey = "";
+                    if (privKey) {
+                      hexPrivKey = Array.from(privKey)
+                        .map((b) => b.toString(16).padStart(2, "0"))
+                        .join("");
+                    }
+                    const sessionId = localStorage.getItem(
+                      "goodvibe_session_id"
+                    );
+                    const pin = localStorage.getItem("goodvibe_pin");
+                    const lang = localStorage.getItem("goodvibe_lang") || "ru";
+                    if (!sessionId || !pin) {
+                      setImportError(
+                        "Ошибка: нет активной сессии или пин-кода"
+                      );
+                      setImportLoading(false);
+                      return;
+                    }
+                    const userData = {
+                      name: user?.name || "",
+                      lang,
+                      seed: phrase,
+                      privateKey: hexPrivKey,
+                      address: account.address,
+                    };
+                    const enc = await encryptData(
+                      JSON.stringify(userData),
+                      pin
+                    );
+                    localStorage.setItem(`goodvibe_userdata_${sessionId}`, enc);
+                    setUser(userData);
+                    setShowImportModal(false);
+                    setImportSeed(Array(12).fill(""));
+                  } catch (e) {
+                    setImportError("Ошибка импорта seed-фразы");
+                  }
+                  setImportLoading(false);
+                }}
+                disabled={importLoading}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  background: "#e6e6ff",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor: importLoading ? "not-allowed" : "pointer",
+                  opacity: importLoading ? 0.7 : 1,
+                }}
+              >
+                {importLoading ? "Импорт..." : "Импортировать"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showSendModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              padding: 24,
+              borderRadius: 12,
+              width: "90%",
+              maxWidth: 400,
+            }}
+          >
+            <h3 style={{ margin: "0 0 16px 0" }}>Отправить токены</h3>
+            <input
+              type="text"
+              value={sendTo}
+              onChange={(e) => setSendTo(e.target.value)}
+              placeholder="Адрес получателя (0x...)"
+              style={{
+                width: "100%",
+                padding: 10,
+                marginBottom: 12,
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                fontSize: 15,
+              }}
+            />
+            <input
+              type="number"
+              value={sendAmount}
+              onChange={(e) => setSendAmount(e.target.value)}
+              placeholder="Сумма"
+              min={0}
+              style={{
+                width: "100%",
+                padding: 10,
+                marginBottom: 12,
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                fontSize: 15,
+              }}
+            />
+            {sendError && (
+              <div style={{ color: "red", marginBottom: 12 }}>{sendError}</div>
+            )}
+            <div style={{ display: "flex", gap: 12 }}>
+              <button
+                onClick={() => {
+                  setShowSendModal(false);
+                  setSendTo("");
+                  setSendAmount("");
+                  setSendError("");
+                }}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  background: "#eee",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor: "pointer",
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={async () => {
+                  setSendError("");
+                  setSendLoading(true);
+                  if (!isAddress(sendTo)) {
+                    setSendError("Некорректный адрес получателя");
+                    setSendLoading(false);
+                    return;
+                  }
+                  let value;
+                  try {
+                    value = parseEther(sendAmount);
+                  } catch {
+                    setSendError("Некорректная сумма");
+                    setSendLoading(false);
+                    return;
+                  }
+                  if (value <= 0n) {
+                    setSendError("Сумма должна быть больше 0");
+                    setSendLoading(false);
+                    return;
+                  }
+                  try {
+                    const sessionId = localStorage.getItem(
+                      "goodvibe_session_id"
+                    );
+                    const encrypted = sessionId
+                      ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
+                      : null;
+                    const pin = localStorage.getItem("goodvibe_pin");
+                    if (!encrypted || !pin)
+                      throw new Error("Нет доступа к приватному ключу");
+                    const decrypted = await decryptData(encrypted, pin);
+                    const userData = JSON.parse(decrypted);
+                    const walletClient = createWalletClientFromPrivateKey(
+                      userData.privateKey
+                    );
+                    const hash = await walletClient.sendTransaction({
+                      to: sendTo,
+                      value,
+                    });
+                    setShowSendModal(false);
+                    setSendTo("");
+                    setSendAmount("");
+                    setSendError("");
+                    alert(`Транзакция отправлена!\nHash: ${hash}`);
+                  } catch (e: any) {
+                    console.error(e);
+                    setSendError(
+                      e?.shortMessage ||
+                        e?.message ||
+                        JSON.stringify(e) ||
+                        "Ошибка отправки"
+                    );
+                  }
+                  setSendLoading(false);
+                }}
+                disabled={sendLoading}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  background: "#e6e6ff",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor: sendLoading ? "not-allowed" : "pointer",
+                  opacity: sendLoading ? 0.7 : 1,
+                }}
+              >
+                {sendLoading ? "Отправка..." : "Отправить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
