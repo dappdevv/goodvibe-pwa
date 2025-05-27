@@ -7,7 +7,7 @@ async function main() {
   // Деплой контракта
   const DAOUsers = await hre.ethers.getContractFactory("DAOUsers");
   const daoUsers = await DAOUsers.deploy();
-  console.log("DAOUsers deployed to:", daoUsers.address);
+  console.log("DAOUsers deployed to:", daoUsers.target);
 
   // Пути к ABI и адресам
   const artifactPath = path.join(
@@ -26,7 +26,7 @@ async function main() {
   // Сохраняем адрес
   fs.writeFileSync(
     addrDest,
-    JSON.stringify({ address: daoUsers.address }, null, 2)
+    JSON.stringify({ address: daoUsers.target }, null, 2)
   );
 
   console.log("ABI скопирован в:", abiDest);
