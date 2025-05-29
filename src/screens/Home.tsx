@@ -3,11 +3,16 @@ import { publicClient } from "../blockchain/client";
 import { decryptData, encryptData } from "../utils/crypto";
 import { useNavigate } from "react-router-dom";
 import goodVibeLogo from "../assets/good-vibe-logo.png";
-import { getUser, createInvite } from "../blockchain/daoUsers";
+import {
+  getUser,
+  createInvite,
+  createVerification,
+  getActiveVerification,
+} from "../blockchain/daoUsers";
 import { createWalletClientFromPrivateKey } from "../blockchain/client";
 import daoUsersAddress from "../blockchain/addresses/DAOUsers.json";
 import { mnemonicToAccount } from "viem/accounts";
-import { parseEther, isAddress, type Address } from "viem";
+import { parseEther, isAddress, type Address, keccak256, toHex } from "viem";
 import DAOUsersAbi from "../blockchain/abi/DAOUsers.json";
 
 const IPFS_CAT = import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "cat/";
@@ -48,7 +53,6 @@ export default function Home() {
   if (user) privateKey = (user as any).privateKey;
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteAddress, setInviteAddress] = useState("");
-  const [daoUserQueryAddress, setDaoUserQueryAddress] = useState<string>("");
   const [showImportModal, setShowImportModal] = useState(false);
   const [importSeed, setImportSeed] = useState<string[]>(Array(12).fill(""));
   const [importError, setImportError] = useState("");
@@ -62,6 +66,18 @@ export default function Home() {
   const [registerName, setRegisterName] = useState("");
   const [registerError, setRegisterError] = useState("");
   const [registerLoading, setRegisterLoading] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [verificationFullName, setVerificationFullName] = useState("");
+  const [verificationKey, setVerificationKey] = useState("");
+  const [verificationPhoto, setVerificationPhoto] = useState<File | null>(null);
+  const [verificationPhotoPreview, setVerificationPhotoPreview] =
+    useState<string>("");
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState("");
+  const [verificationStatus, setVerificationStatus] = useState<any>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     console.log("[Home] useEffect стартовал");
@@ -133,7 +149,6 @@ export default function Home() {
     try {
       if (!user.address.startsWith("0x"))
         throw new Error("Адрес пользователя должен начинаться с 0x");
-      setDaoUserQueryAddress(user.address);
       console.log(
         "[Home] Запрашиваем данные пользователя для адреса:",
         user.address
@@ -151,6 +166,65 @@ export default function Home() {
       setDaoUser(null);
     }
   }, [user]);
+
+  // useEffect для получения статуса текущей верификации
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      try {
+        const res = (await getActiveVerification(
+          user.address as Address
+        )) as any[];
+        // Если статус None (0), значит нет активной верификации
+        const statusNum = Number(res[4]);
+        if (res && typeof statusNum === "number" && statusNum !== 0) {
+          setVerificationStatus({
+            status:
+              [
+                "Нет", // 0
+                "Ожидание", // 1
+                "Подтверждено", // 2
+                "Отклонено", // 3
+                "Раскрыто", // 4
+                "Приостановлено", // 5
+                "Верифицировано", // 6
+              ][statusNum] || statusNum,
+            raw: res,
+          });
+        } else {
+          setVerificationStatus(null);
+        }
+      } catch (e) {
+        setVerificationStatus(null);
+      }
+    })();
+  }, [user, showVerificationModal]);
+
+  // Управление потоком камеры для селфи
+  useEffect(() => {
+    if (!showCamera) return;
+    let stream: MediaStream | null = null;
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (err) {
+        setVerificationError("Не удалось получить доступ к камере");
+        setShowCamera(false);
+      }
+    })();
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCamera]);
 
   const handleCopy = async () => {
     if (user) {
@@ -310,10 +384,6 @@ export default function Home() {
           <span style={{ fontFamily: "monospace" }}>
             {daoUsersAddress.address}
           </span>
-        </div>
-        <div style={{ fontSize: 13, marginTop: 8, color: "#888" }}>
-          <b>Адрес для запроса пользователя:</b>{" "}
-          <span style={{ fontFamily: "monospace" }}>{daoUserQueryAddress}</span>
         </div>
       </div>
       <div
@@ -514,9 +584,9 @@ export default function Home() {
           </div>
         </div>
       )}
-      {daoUser && daoUser[2] === UserStatus.Active && (
+      {daoUser && daoUser[2] === UserStatus.Active && !verificationStatus && (
         <button
-          onClick={() => setShowInviteModal(true)}
+          onClick={() => setShowVerificationModal(true)}
           style={{
             width: "100%",
             marginTop: 16,
@@ -530,8 +600,336 @@ export default function Home() {
             cursor: "pointer",
           }}
         >
-          Создать приглашение
+          Начать верификацию
         </button>
+      )}
+      {verificationStatus && (
+        <div
+          style={{
+            margin: "16px 0",
+            background: "#f7f7ff",
+            borderRadius: 8,
+            padding: 12,
+          }}
+        >
+          <b>Статус верификации:</b> {verificationStatus.status}
+        </div>
+      )}
+      {showVerificationModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              padding: 24,
+              borderRadius: 12,
+              width: "90%",
+              maxWidth: 400,
+            }}
+          >
+            <h3 style={{ margin: "0 0 16px 0" }}>Верификация пользователя</h3>
+            <input
+              type="text"
+              value={verificationFullName}
+              onChange={(e) => setVerificationFullName(e.target.value)}
+              placeholder="Фамилия Имя Отчество"
+              style={{
+                width: "100%",
+                padding: 10,
+                marginBottom: 12,
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                fontSize: 15,
+              }}
+              autoComplete="off"
+            />
+            <input
+              type="password"
+              value={verificationKey}
+              onChange={(e) => setVerificationKey(e.target.value)}
+              placeholder="Ключ верификации (пароль)"
+              style={{
+                width: "100%",
+                padding: 10,
+                marginBottom: 12,
+                border: "1px solid #ddd",
+                borderRadius: 6,
+                fontSize: 15,
+              }}
+              autoComplete="off"
+            />
+            {verificationPhotoPreview && (
+              <img
+                src={verificationPhotoPreview}
+                alt="Селфи"
+                style={{
+                  width: 120,
+                  height: 120,
+                  borderRadius: "50%",
+                  objectFit: "cover",
+                  marginBottom: 12,
+                }}
+              />
+            )}
+            {!showCamera && (
+              <button
+                onClick={() => setShowCamera(true)}
+                style={{
+                  width: "100%",
+                  marginBottom: 12,
+                  padding: 10,
+                  background: "#e6e6ff",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor: "pointer",
+                }}
+              >
+                Сделать селфи
+              </button>
+            )}
+            {showCamera && (
+              <div style={{ marginBottom: 12 }}>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  width={240}
+                  height={180}
+                  style={{ borderRadius: 8, background: "#eee" }}
+                />
+                <canvas
+                  ref={canvasRef}
+                  width={240}
+                  height={180}
+                  style={{ display: "none" }}
+                />
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button
+                    onClick={async () => {
+                      if (!videoRef.current || !canvasRef.current) return;
+                      const ctx = canvasRef.current.getContext("2d");
+                      if (!ctx) return;
+                      ctx.drawImage(videoRef.current, 0, 0, 240, 180);
+                      canvasRef.current.toBlob((blob) => {
+                        if (blob) {
+                          setVerificationPhoto(
+                            new File([blob], "selfie.png", {
+                              type: "image/png",
+                            })
+                          );
+                          setVerificationPhotoPreview(
+                            URL.createObjectURL(blob)
+                          );
+                        }
+                      }, "image/png");
+                      setShowCamera(false);
+                      // Остановить камеру
+                      if (videoRef.current.srcObject) {
+                        const tracks = (
+                          videoRef.current.srcObject as MediaStream
+                        ).getTracks();
+                        tracks.forEach((track) => track.stop());
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: 8,
+                      background: "#e6e6ff",
+                      border: "none",
+                      borderRadius: 6,
+                      fontSize: 15,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Сфотографировать
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCamera(false);
+                      if (videoRef.current && videoRef.current.srcObject) {
+                        const tracks = (
+                          videoRef.current.srcObject as MediaStream
+                        ).getTracks();
+                        tracks.forEach((track) => track.stop());
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: 8,
+                      background: "#eee",
+                      border: "none",
+                      borderRadius: 6,
+                      fontSize: 15,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </div>
+            )}
+            {verificationError && (
+              <div style={{ color: "red", marginBottom: 12 }}>
+                {verificationError}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 12 }}>
+              <button
+                onClick={() => {
+                  setShowVerificationModal(false);
+                  setVerificationFullName("");
+                  setVerificationKey("");
+                  setVerificationPhoto(null);
+                  setVerificationPhotoPreview("");
+                  setVerificationError("");
+                }}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  background: "#eee",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor: "pointer",
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={async () => {
+                  setVerificationError("");
+                  setVerificationLoading(true);
+                  try {
+                    if (!user) throw new Error("Нет пользователя");
+                    if (
+                      !verificationFullName ||
+                      !verificationKey ||
+                      !verificationPhoto
+                    )
+                      throw new Error("Заполните все поля и сделайте селфи");
+                    // 1. Зашифровать ФИО
+                    const encryptedFullName = await encryptData(
+                      verificationFullName,
+                      verificationKey
+                    );
+                    // 2. Зашифровать фото (читаем как base64, шифруем как строку)
+                    const photoBase64 = await new Promise<string>(
+                      (resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(verificationPhoto);
+                      }
+                    );
+                    const encryptedPhoto = await encryptData(
+                      photoBase64,
+                      verificationKey
+                    );
+                    // 3. Загружаем зашифрованное фото на IPFS
+                    const formData = new FormData();
+                    const blob = new Blob([encryptedPhoto], {
+                      type: "text/plain",
+                    });
+                    formData.append("path", blob, "photo.enc");
+                    let endpoint =
+                      import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "add";
+                    let fetchOptions: RequestInit = {
+                      method: "POST",
+                      body: formData,
+                    };
+                    try {
+                      const url = new URL(endpoint);
+                      if (url.username && url.password) {
+                        endpoint = endpoint.replace(
+                          `${url.username}:${url.password}@`,
+                          ""
+                        );
+                        fetchOptions.headers = {
+                          ...(fetchOptions.headers || {}),
+                          Authorization:
+                            "Basic " + btoa(`${url.username}:${url.password}`),
+                        };
+                      }
+                    } catch {}
+                    const res = await fetch(endpoint, fetchOptions);
+                    if (!res.ok)
+                      throw new Error("Ошибка загрузки фото на IPFS");
+                    const data = await res.json();
+                    if (!data.Hash) throw new Error("IPFS не вернул CID");
+                    const photoCID = data.Hash;
+                    // 4. Хэш верификации
+                    const verificationHash = keccak256(
+                      toHex(verificationFullName)
+                    );
+                    // 5. Верификатор (пока сам пользователь)
+                    const verifier = user.address as Address;
+                    // 6. Получаем walletClient
+                    const sessionId = localStorage.getItem(
+                      "goodvibe_session_id"
+                    );
+                    const encrypted = sessionId
+                      ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
+                      : null;
+                    const pin = localStorage.getItem("goodvibe_pin");
+                    if (!encrypted || !pin)
+                      throw new Error("Нет доступа к приватному ключу");
+                    const decrypted = await decryptData(encrypted, pin);
+                    const userData = JSON.parse(decrypted);
+                    const walletClient = createWalletClientFromPrivateKey(
+                      userData.privateKey
+                    );
+                    // 7. Вызов контракта
+                    await createVerification(
+                      walletClient,
+                      verifier,
+                      encryptedFullName,
+                      photoCID,
+                      verificationHash
+                    );
+                    setShowVerificationModal(false);
+                    setVerificationFullName("");
+                    setVerificationKey("");
+                    setVerificationPhoto(null);
+                    setVerificationPhotoPreview("");
+                    setVerificationError("");
+                    alert("Верификация отправлена!");
+                  } catch (e: any) {
+                    setVerificationError(
+                      e?.message || "Ошибка отправки верификации"
+                    );
+                  }
+                  setVerificationLoading(false);
+                }}
+                disabled={verificationLoading}
+                style={{
+                  flex: 1,
+                  padding: 10,
+                  background: "#e6e6ff",
+                  border: "none",
+                  borderRadius: 6,
+                  fontSize: 15,
+                  cursor: verificationLoading ? "not-allowed" : "pointer",
+                  opacity: verificationLoading ? 0.7 : 1,
+                }}
+              >
+                {verificationLoading ? "Отправка..." : "Отправить"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {daoUser && daoUser[2] === UserStatus.None && (
         <button
