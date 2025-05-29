@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
 /// @title DAOUsers - Управление пользователями и верификациями для GOOD VIBE DAO
 /// @author GOOD VIBE
 /// @notice Контракт для регистрации пользователей, приглашений и верификаций в DAO
 /// @custom:evm-version paris
-contract DAOUsers {
+contract DAOUsers is ReentrancyGuard {
     /// @notice Статус пользователя
-    enum UserStatus { None, Pending, Active, Inactive }
+    enum UserStatus { None, Pending, Active, Inactive, Paused, Blocked }
     /// @notice Статус верификации
-    enum VerificationStatus { None, Pending, Approved, Rejected }
+    enum VerificationStatus { None, Pending, Approved, Rejected, Disclosed, Paused, Verified }
 
     /// @notice Структура пользователя DAO
     struct User {
@@ -30,29 +32,36 @@ contract DAOUsers {
         bool active;              // Активно ли приглашение
     }
 
-    /// @notice Структура верификации
+    /// @notice Структура данных для хранения информации о верификации пользователя
     struct Verification {
-        uint id;                      // ID верификации
-        address verificator;          // Кто верифицирует
-        address verifiable;           // Кого верифицируют
-        VerificationStatus status;    // Статус верификации
-        string verificationString;    // Описание/строка верификации
-        bytes32 verificationHash;     // Хэш верификации
-        bytes32 photoHash;            // Хэш фото
-        string ipfsCID;               // CID в IPFS
-        string description;           // Описание
+        address requester;                // Пользователь, запрашивающий верификацию
+        address verifier;                 // Пользователь, который будет верифицировать
+        string encryptedFullName;         // Зашифрованное полное имя (макс. 111 символов)
+        string photoCID;                  // CID зашифрованного фото в IPFS (макс. 999 символов)
+        VerificationStatus status;        // Текущий статус верификации
+        string comment;                   // Комментарий к статусу (макс. 333 символа, опционально)
+        uint256 created;                  // Дата создания (timestamp)
+        bool isInspected;                 // Флаг независимой проверки
+        string independentInspection;     // Отчёт независимой проверки (макс. 999 символов)
+        bytes32 verificationHash;         // Хэш верификации
     }
 
     mapping(address => User) public users;
-    mapping(uint => Verification) public verifications;
+    mapping(address => Invite) public activeInvites;
+
+    /// @notice Активные верификации пользователей (по адресу инициатора)
+    mapping(address => Verification) public activeVerifications;
+
+    /// @notice История (закрытые) верификаций пользователей
     mapping(address => Verification[]) public userVerifications;
-    mapping(address => Invite) private activeInvites;
 
     uint private inviteCounter;
     uint private verificationCounter;
 
-    /// @notice Время действия приглашения (3 дня)
-    uint constant INVITE_VALIDITY = 3 days;
+    /// @notice Время действия приглашения (24 часа)
+    uint constant INVITE_VALIDITY = 1 days;
+    /// @notice Время действия верификации (3 дня)
+    uint constant VERIFICATION_VALIDITY = 3 days;
 
     /// @notice Событие создания приглашения
     event InviteCreated(uint indexed id, address indexed inviter, address indexed invitee, uint expiration);
@@ -61,8 +70,22 @@ contract DAOUsers {
     /// @notice Событие начала верификации
     event VerificationStarted(uint indexed id, address indexed verificator, address indexed verifiable, string ipfsCID);
 
+    address public owner;
+    address public DAOGovernanceAddress;
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner");
+        _;
+    }
+
+    modifier onlyDAOGovernance() {
+        require(msg.sender == DAOGovernanceAddress, "Only DAO Governance");
+        _;
+    }
+
     /// @dev В конструкторе создаётся основатель DAO
     constructor() {
+        owner = msg.sender;
         User memory founder = User({
             name: "founder",
             userAddress: msg.sender,
@@ -76,9 +99,11 @@ contract DAOUsers {
 
     /// @notice Создать приглашение для нового пользователя
     /// @param invitee Адрес приглашаемого пользователя
-    function createInvite(address invitee) external {
+    function createInvite(address invitee) external nonReentrant {
         require(users[msg.sender].status == UserStatus.Active, "Only active users can create invites");
         require(invitee != address(0), "Invalid invitee address");
+        require(activeInvitesCount[msg.sender] < MAX_ACTIVE_INVITES, "Maximum active invites reached");
+        
         Invite storage existing = activeInvites[invitee];
         require(!existing.active || existing.expiration < block.timestamp, "Active invite already exists for invitee");
 
@@ -92,13 +117,17 @@ contract DAOUsers {
         });
 
         activeInvites[invitee] = newInvite;
+        activeInvitesCount[msg.sender]++;
 
         emit InviteCreated(newInvite.id, msg.sender, invitee, newInvite.expiration);
     }
 
     /// @notice Зарегистрировать пользователя по приглашению
     /// @param name Имя пользователя
-    function registerUser(string calldata name) external {
+    function registerUser(string calldata name) external nonReentrant {
+        require(bytes(name).length <= MAX_NAME_LENGTH, "Name too long");
+        require(!nameExists[name], "Name already taken");
+        
         Invite storage invite = activeInvites[msg.sender];
         require(invite.active, "No active invite for caller");
         require(invite.expiration >= block.timestamp, "Invite expired");
@@ -113,47 +142,147 @@ contract DAOUsers {
             referrer: invite.inviter
         });
 
+        nameExists[name] = true;
         invite.active = false;
+        activeInvitesCount[invite.inviter]--;
 
         emit UserRegistered(msg.sender, name, invite.inviter);
     }
 
-    /// @notice Начать верификацию пользователя
-    /// @param verifiable Кого верифицируют
-    /// @param ipfsCID CID фото/документа в IPFS
-    /// @param verificationString Строка/описание верификации
-    /// @param encryptedPhotoBuffer Зашифрованный буфер фото (используется только для хэша)
-    /// @param description Описание верификации
-    function startVerification(
-        address verifiable,
-        string calldata ipfsCID,
-        string calldata verificationString,
-        bytes calldata encryptedPhotoBuffer,
-        string calldata description
-    ) external {
-        require(users[msg.sender].status == UserStatus.Active, "Verificator must be active user");
-        require(users[verifiable].status == UserStatus.Active, "Verifiable must be active user");
+    /// @notice Создать запрос на верификацию
+    /// @param _verifier адрес пользователя, который будет верифицировать
+    /// @param _encryptedFullName зашифрованное полное имя (макс. 111 символов)
+    /// @param _photoCID CID зашифрованного фото (макс. 999 символов)
+    /// @param _verificationHash хэш верификации
+    function createVerification(
+        address _verifier,
+        string memory _encryptedFullName,
+        string memory _photoCID,
+        bytes32 _verificationHash
+    ) public nonReentrant {
+        // Проверка, что инициатор зарегистрирован и не заблокирован
+        require(users[msg.sender].status == UserStatus.Active, "Not registered or blocked");
+        Verification storage current = activeVerifications[msg.sender];
+        // Проверка, что нет активной верификации или срок действия истёк
+        require(
+            current.status == VerificationStatus.None ||
+            current.status == VerificationStatus.Rejected ||
+            current.status == VerificationStatus.Approved ||
+            (current.created + VERIFICATION_VALIDITY < block.timestamp),
+            "Active verification exists or not expired"
+        );
+        // Проверка, что верификатор зарегистрирован и не заблокирован
+        require(users[_verifier].status == UserStatus.Active, "Verifier not active");
 
-        bytes32 verificationHash = keccak256(abi.encodePacked(block.timestamp, verificationString));
-        bytes32 photoHash = keccak256(encryptedPhotoBuffer);
+        // Ограничения на длину строк
+        require(bytes(_encryptedFullName).length <= 111, "Full name too long");
+        require(bytes(_photoCID).length <= 999, "Photo CID too long");
 
-        verificationCounter++;
-
-        Verification memory v = Verification({
-            id: verificationCounter,
-            verificator: msg.sender,
-            verifiable: verifiable,
+        activeVerifications[msg.sender] = Verification({
+            requester: msg.sender,
+            verifier: _verifier,
+            encryptedFullName: _encryptedFullName,
+            photoCID: _photoCID,
             status: VerificationStatus.Pending,
-            verificationString: verificationString,
-            verificationHash: verificationHash,
-            photoHash: photoHash,
-            ipfsCID: ipfsCID,
-            description: description
+            comment: "",
+            created: block.timestamp,
+            isInspected: false,
+            independentInspection: "",
+            verificationHash: _verificationHash
         });
+    }
 
-        verifications[verificationCounter] = v;
-        userVerifications[verifiable].push(v);
+    /// @notice Подтвердить или отклонить верификацию
+    /// @param _requester адрес пользователя, который запрашивал верификацию
+    /// @param _verificationHash хэш верификации
+    function approveVerification(
+        address _requester,
+        bytes32 _verificationHash
+    ) public nonReentrant {
+        Verification storage v = activeVerifications[_requester];
+        require(v.verifier == msg.sender, "Not your verification");
+        require(v.status == VerificationStatus.Pending, "Verification not pending");
 
-        emit VerificationStarted(verificationCounter, msg.sender, verifiable, ipfsCID);
+        if (v.verificationHash == _verificationHash) {
+            v.status = VerificationStatus.Approved;
+            v.comment = "Approved";
+        } else {
+            v.status = VerificationStatus.Rejected;
+            v.comment = "Hash mismatch";
+        }
+
+        _finalizeVerification(_requester);
+    }
+
+    function setDAOGovernanceAddress(address _daoGovernance) external onlyOwner {
+        require(_daoGovernance != address(0), "Zero address");
+        DAOGovernanceAddress = _daoGovernance;
+    }
+
+    function setUserStatus(address user, UserStatus status) external onlyDAOGovernance nonReentrant {
+        require(users[user].userAddress != address(0), "User not found");
+        users[user].status = status;
+    }
+
+    function setUserLevel(address user, uint level) external onlyDAOGovernance nonReentrant {
+        require(users[user].userAddress != address(0), "User not found");
+        users[user].level = level;
+    }
+
+    function setUserActivity(address user, uint activity) external onlyDAOGovernance nonReentrant {
+        require(users[user].userAddress != address(0), "User not found");
+        users[user].activity = activity;
+    }
+
+    /// @dev Переносит верификацию в историю и удаляет из активных
+    function _finalizeVerification(address _requester) private {
+        Verification storage v = activeVerifications[_requester];
+        userVerifications[_requester].push(v);
+        userVerifications[v.verifier].push(v);
+        delete activeVerifications[_requester];
+    }
+
+    /// @notice Получить историю верификаций пользователя
+    function getUserVerifications(address user) external view returns (Verification[] memory) {
+        return userVerifications[user];
+    }
+
+    /// @notice Получить историю верификаций как верификатор
+    function getVerifierVerifications(address verifier) external view returns (Verification[] memory result) {
+        uint count = 0;
+        // Считаем количество верификаций, где verifier - верификатор
+        for (uint i = 0; i < userVerifications[verifier].length; i++) {
+            if (userVerifications[verifier][i].verifier == verifier) {
+                count++;
+            }
+        }
+        result = new Verification[](count);
+        uint idx = 0;
+        for (uint i = 0; i < userVerifications[verifier].length; i++) {
+            if (userVerifications[verifier][i].verifier == verifier) {
+                result[idx] = userVerifications[verifier][i];
+                idx++;
+            }
+        }
+    }
+
+    // Добавляем константы
+    uint256 public constant MAX_NAME_LENGTH = 99;
+    uint256 public constant MAX_ACTIVE_INVITES = 7;
+
+    // Добавляем маппинг для проверки уникальности имени
+    mapping(string => bool) private nameExists;
+
+    // Добавляем счетчик активных приглашений для каждого пользователя
+    mapping(address => uint256) private activeInvitesCount;
+
+    // Добавляем функцию для проверки доступности имени
+    function isNameAvailable(string calldata name) external view returns (bool) {
+        return !nameExists[name];
+    }
+
+    // Добавляем функцию для получения количества активных приглашений
+    function getActiveInvitesCount(address user) external view returns (uint256) {
+        return activeInvitesCount[user];
     }
 } 
