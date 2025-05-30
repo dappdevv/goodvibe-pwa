@@ -12,6 +12,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 
 const languages = [
   { code: "ru", label: "Русский" },
@@ -29,7 +40,7 @@ function getSessions() {
   }
 }
 
-export default function Welcome() {
+export default function Login() {
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [lang, setLang] = useState("ru");
@@ -41,6 +52,12 @@ export default function Welcome() {
       document.documentElement.classList.contains("dark")
   );
   const navigate = useNavigate();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<null | {
+    id: string;
+    name: string;
+    created: string;
+  }>(null);
 
   useEffect(() => {
     setSessions(getSessions());
@@ -99,13 +116,40 @@ export default function Welcome() {
                         {new Date(s.created).toLocaleString(lang)}
                       </span>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => handleSessionLogin(s)}
-                    >
-                      Войти
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleSessionLogin(s)}
+                      >
+                        Войти
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(s.id);
+                          toast("Адрес кошелька скопирован", {
+                            description: s.id,
+                          });
+                          console.log("Информация о сессии:", s);
+                        }}
+                      >
+                        Адрес
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          setSessionToDelete(s);
+                          setDeleteDialogOpen(true);
+                        }}
+                      >
+                        Удалить
+                      </Button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -159,6 +203,49 @@ export default function Welcome() {
           </form>
         </CardContent>
       </Card>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить сессию?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Это действие удалит выбранную сессию и связанные с ней данные. Вы
+              уверены?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!sessionToDelete) return;
+                const sessionsRaw = localStorage.getItem("goodvibe_sessions");
+                let sessionsArr: {
+                  id: string;
+                  name: string;
+                  created: string;
+                }[] = [];
+                try {
+                  if (sessionsRaw) sessionsArr = JSON.parse(sessionsRaw);
+                } catch {}
+                const filtered = sessionsArr.filter(
+                  (sess) => sess.id !== sessionToDelete.id
+                );
+                localStorage.setItem(
+                  "goodvibe_sessions",
+                  JSON.stringify(filtered)
+                );
+                localStorage.removeItem(
+                  `goodvibe_userdata_${sessionToDelete.id}`
+                );
+                setSessions(filtered);
+                setSessionToDelete(null);
+                setDeleteDialogOpen(false);
+              }}
+            >
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
