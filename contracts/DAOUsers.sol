@@ -28,8 +28,6 @@ contract DAOUsers is ReentrancyGuard {
     address public DAOGovernanceAddress;
     /// @notice Счетчик приглашений
     uint private inviteCounter;
-    /// @notice Счетчик верификаций
-    uint private verificationCounter;
     /// @notice Общее количество пользователей
     uint public usersCount;
 

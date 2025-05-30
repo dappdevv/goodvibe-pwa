@@ -1,0 +1,50 @@
+[
+  {
+    "name": "hypnosis-tracy",
+    "description": "Hypnosis Tracy 7B",
+    "provider": "Azure",
+    "input_modalities": [
+      "text",
+      "audio"
+    ],
+    "output_modalities": [
+      "audio",
+      "text"
+    ],
+    "tools": true,
+    "vision": false,
+    "audio": true
+  },
+  {
+    "name": "openai-audio",
+    "description": "OpenAI GPT-4o-audio-preview",
+    "voices": [
+      "alloy",
+      "echo",
+      "fable",
+      "onyx",
+      "nova",
+      "shimmer",
+      "coral",
+      "verse",
+      "ballad",
+      "ash",
+      "sage",
+      "amuch",
+      "dan"
+    ],
+    "provider": "Azure",
+    "input_modalities": [
+      "text",
+      "image",
+      "audio"
+    ],
+    "output_modalities": [
+      "audio",
+      "text"
+    ],
+    "tools": true,
+    "vision": true,
+    "audio": true
+  }
+]

@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from "react";
 import { publicClient } from "../blockchain/client";
 import { decryptData, encryptData } from "../utils/crypto";
 import { useNavigate } from "react-router-dom";
-import goodVibeLogo from "../assets/good-vibe-logo.png";
 import {
   getUser,
   createInvite,
@@ -65,9 +64,6 @@ export default function Home() {
   const [balance, setBalance] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [copied, setCopied] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState<string>(goodVibeLogo);
-  const [loadingAvatar, setLoadingAvatar] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const [daoUser, setDaoUser] = useState<any>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
@@ -119,7 +115,6 @@ export default function Home() {
   const [verifyReady, setVerifyReady] = useState(false);
 
   useEffect(() => {
-    console.log("[Home] useEffect стартовал");
     const sessionId = localStorage.getItem("goodvibe_session_id");
     const encrypted = sessionId
       ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
@@ -134,10 +129,8 @@ export default function Home() {
       try {
         const decrypted = await decryptData(encrypted, pin);
         const data = JSON.parse(decrypted);
-        console.log("[Home] Данные пользователя расшифрованы:", data);
         setUser(data);
         if (data.avatarHash) {
-          setLoadingAvatar(true);
           try {
             let endpoint = IPFS_CAT + data.avatarHash;
             let fetchOptions: RequestInit = { method: "POST" };
@@ -159,15 +152,13 @@ export default function Home() {
             }
             const res = await fetch(endpoint, fetchOptions);
             if (res.ok) {
-              const blob = await res.blob();
-              setAvatarUrl(URL.createObjectURL(blob));
+              // Удалить: const blob = await res.blob();
             } else {
               console.error("Ошибка получения аватара:", await res.text());
             }
           } catch (err) {
             console.error("Ошибка загрузки аватара с IPFS:", err);
           }
-          setLoadingAvatar(false);
         }
         const bal = await publicClient.getBalance({ address: data.address });
         const formatted =
@@ -296,77 +287,6 @@ export default function Home() {
   const handleLogout = () => {
     localStorage.removeItem("goodvibe_pin");
     navigate("/");
-  };
-
-  const handleAvatarClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-    setLoadingAvatar(true);
-    try {
-      const formData = new FormData();
-      formData.append("path", file);
-      let endpoint = import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "add";
-      let fetchOptions: RequestInit = { method: "POST", body: formData };
-      try {
-        const url = new URL(endpoint);
-        if (url.username && url.password) {
-          endpoint = endpoint.replace(`${url.username}:${url.password}@`, "");
-          fetchOptions.headers = {
-            ...fetchOptions.headers,
-            Authorization: "Basic " + btoa(`${url.username}:${url.password}`),
-          };
-        }
-      } catch (parseErr) {
-        console.error("Ошибка парсинга endpoint:", parseErr);
-      }
-      const res = await fetch(endpoint, fetchOptions);
-      if (!res.ok) {
-        const text = await res.text();
-        console.error("Ошибка ответа IPFS:", res.status, text);
-        alert("Ошибка загрузки аватара: " + text);
-        setLoadingAvatar(false);
-        return;
-      }
-      let data;
-      try {
-        data = await res.json();
-      } catch (jsonErr) {
-        console.error("Ошибка парсинга JSON ответа IPFS:", jsonErr);
-        alert("Ошибка загрузки аватара: некорректный ответ IPFS");
-        setLoadingAvatar(false);
-        return;
-      }
-      if (data.Hash) {
-        const sessionId = localStorage.getItem("goodvibe_session_id");
-        if (sessionId) {
-          const encrypted = localStorage.getItem("goodvibe_userdata");
-          const pin = localStorage.getItem("goodvibe_pin");
-          if (encrypted && pin) {
-            const decrypted = await decryptData(encrypted, pin);
-            const userData = JSON.parse(decrypted);
-            userData.avatarHash = data.Hash;
-            const newEnc = await encryptData(JSON.stringify(userData), pin);
-            localStorage.setItem(`goodvibe_userdata_${sessionId}`, newEnc);
-            setUser({ ...userData });
-            setAvatarUrl(URL.createObjectURL(file));
-          }
-        }
-      } else {
-        console.error("IPFS ответ не содержит Hash:", data);
-        alert("Ошибка загрузки аватара: IPFS не вернул hash");
-      }
-    } catch (err) {
-      console.error("Ошибка загрузки аватара:", err);
-      alert(
-        "Ошибка загрузки аватара: " +
-          (err instanceof Error ? err.message : String(err))
-      );
-    }
-    setLoadingAvatar(false);
   };
 
   const handleCreateInvite = async () => {
@@ -498,7 +418,7 @@ export default function Home() {
   }
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-2">
-      <Card className="w-full max-w-md mx-auto">
+      <Card className="w-full max-w-lg sm:max-w-xl md:max-w-2xl mx-auto px-2 sm:px-4">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-lg font-bold">Главная</CardTitle>
           <div className="flex items-center gap-2">
@@ -507,47 +427,18 @@ export default function Home() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="bg-muted rounded-lg p-3 mb-4">
-            <b>Контракты:</b>
-            <div className="text-sm mt-1">
-              DAOUsers:{" "}
-              <span className="font-mono">{daoUsersAddress.address}</span>
-            </div>
-          </div>
-          <div className="flex flex-col items-center mb-6">
-            <div className="relative w-24 h-24 mb-2">
-              <img
-                src={avatarUrl}
-                alt="avatar"
-                className="w-24 h-24 rounded-full object-cover border-2 border-primary"
-              />
-              {loadingAvatar && (
-                <div className="absolute inset-0 bg-white/70 dark:bg-black/40 rounded-full flex items-center justify-center text-primary text-lg">
-                  Загрузка...
-                </div>
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleAvatarChange}
-            />
-            <Button size="sm" variant="secondary" onClick={handleAvatarClick}>
-              Загрузить аватарку
-            </Button>
-          </div>
           <div className="mb-2">
             <b>Сессия:</b> {user.name}
           </div>
-          <div className="flex items-center mb-2">
+          <div className="flex flex-col sm:flex-row items-center mb-2 break-all w-full">
             <b>Адрес:</b>
-            <span className="font-mono ml-2">{user.address}</span>
+            <span className="font-mono ml-2 break-all w-full max-w-full overflow-x-auto whitespace-pre-wrap">
+              {user.address}
+            </span>
             <Button
               variant="ghost"
               size="icon"
-              className="ml-2"
+              className="ml-2 shrink-0"
               onClick={handleCopy}
               title="Скопировать адрес"
             >
@@ -578,7 +469,7 @@ export default function Home() {
               <span className="text-primary text-xs ml-2">Скопировано!</span>
             )}
           </div>
-          <div className="mb-4 flex items-center">
+          <div className="mb-4 flex items-center flex-wrap gap-2">
             <b>Баланс:</b> <span className="ml-2">{balance}</span>
             <Button
               size="sm"
@@ -962,8 +853,8 @@ export default function Home() {
             </Button>
           )}
           {showInviteModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-              <div className="bg-white p-8 rounded-lg max-w-md">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2">
+              <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto">
                 <h3 className="text-lg font-bold mb-4">Создание приглашения</h3>
                 <Input
                   type="text"
@@ -1000,8 +891,8 @@ export default function Home() {
             </div>
           )}
           {showRegisterModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-              <div className="bg-white p-8 rounded-lg max-w-md">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2">
+              <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto">
                 <h3 className="text-lg font-bold mb-4">
                   Регистрация пользователя
                 </h3>
@@ -1110,17 +1001,13 @@ export default function Home() {
             </div>
           )}
         </CardContent>
-        <CardFooter>
-          <Button
-            variant="outline"
-            className="w-full mt-4"
-            onClick={handleLogout}
-          >
+        <CardFooter className="flex flex-col gap-2 w-full">
+          <Button variant="outline" className="w-full" onClick={handleLogout}>
             Завершить сеанс
           </Button>
           <Button
             variant="secondary"
-            className="w-full mt-4 ml-2"
+            className="w-full"
             onClick={() => {
               setShowVerifierModal(true);
               setVerifyUserAddress("");
@@ -1137,8 +1024,8 @@ export default function Home() {
         </CardFooter>
       </Card>
       {showSendModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-8 rounded-lg max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto">
             <h3 className="text-lg font-bold mb-4">Отправить токены</h3>
             <Input
               type="text"
@@ -1237,8 +1124,8 @@ export default function Home() {
         </div>
       )}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-8 rounded-lg max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto">
             <h3 className="text-lg font-bold mb-4">Импорт кошелька</h3>
             <div className="flex flex-wrap gap-2">
               {importSeed.map((word, idx) => (
@@ -1333,8 +1220,8 @@ export default function Home() {
         </div>
       )}
       {showVerifierModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-8 rounded-lg max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto">
             <h3 className="text-lg font-bold mb-4">Верификация пользователя</h3>
             <Input
               type="text"
