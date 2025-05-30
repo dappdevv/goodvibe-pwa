@@ -2,11 +2,26 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateMnemonic, mnemonicToAccount, english } from "viem/accounts";
 import { encryptData } from "../utils/crypto";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 
 export default function SeedPhrase() {
   const navigate = useNavigate();
   const [mnemonic, setMnemonic] = useState<string[]>([]);
   const [step, setStep] = useState(0);
+  const [dark, setDark] = useState(
+    typeof window !== "undefined" &&
+      document.documentElement.classList.contains("dark")
+  );
+
+  useEffect(() => {
+    if (dark) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [dark]);
 
   useEffect(() => {
     // Генерируем seed-фразу только при первом рендере
@@ -63,58 +78,40 @@ export default function SeedPhrase() {
   };
 
   return (
-    <div
-      style={{
-        maxWidth: 400,
-        margin: "60px auto",
-        padding: 24,
-        borderRadius: 12,
-        boxShadow: "0 2px 12px #eee",
-        background: "#fff",
-      }}
-    >
-      <h2 style={{ color: "#222" }}>Seed-фраза</h2>
-      {mnemonic.length > 0 ? (
-        <>
-          <p style={{ fontSize: 18, textAlign: "center", margin: "32px 0" }}>
-            <span
-              style={{
-                display: "inline-block",
-                padding: "16px 32px",
-                background: "#f7f7ff",
-                borderRadius: 8,
-                fontWeight: 700,
-                fontSize: 24,
-                letterSpacing: 2,
-                color: "#6c47ff",
-              }}
-            >
-              {mnemonic[step]}
-            </span>
-          </p>
-          <p style={{ textAlign: "center", color: "#888" }}>
-            {step + 1} / {mnemonic.length}
-          </p>
-          <button
-            onClick={handleNext}
-            style={{
-              width: "100%",
-              padding: 12,
-              background: "#e6e6ff",
-              color: "#222",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 600,
-              fontSize: 18,
-              marginTop: 24,
-            }}
-          >
-            {step < mnemonic.length - 1 ? "Далее" : "Готово"}
-          </button>
-        </>
-      ) : (
-        <p>Генерация seed-фразы...</p>
-      )}
+    <div className="min-h-screen flex items-center justify-center bg-background px-2">
+      <Card className="w-full max-w-md mx-auto">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-lg font-bold">Seed-фраза</CardTitle>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Тема</span>
+            <Switch checked={dark} onCheckedChange={setDark} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {mnemonic.length > 0 ? (
+            <>
+              <div className="flex justify-center my-8">
+                <span className="inline-block px-8 py-4 bg-muted rounded-lg font-bold text-2xl tracking-widest text-primary">
+                  {mnemonic[step]}
+                </span>
+              </div>
+              <div className="text-center text-muted-foreground mb-4">
+                {step + 1} / {mnemonic.length}
+              </div>
+              <Button
+                onClick={handleNext}
+                className="w-full text-base font-semibold mt-4"
+              >
+                {step < mnemonic.length - 1 ? "Далее" : "Готово"}
+              </Button>
+            </>
+          ) : (
+            <div className="text-center text-muted-foreground py-8">
+              Генерация seed-фразы...
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,5 +1,17 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 const languages = [
   { code: "ru", label: "Русский" },
@@ -24,11 +36,23 @@ export default function Welcome() {
   const [sessions, setSessions] = useState<
     { id: string; name: string; created: string }[]
   >([]);
+  const [dark, setDark] = useState(
+    typeof window !== "undefined" &&
+      document.documentElement.classList.contains("dark")
+  );
   const navigate = useNavigate();
 
   useEffect(() => {
     setSessions(getSessions());
   }, []);
+
+  useEffect(() => {
+    if (dark) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [dark]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,121 +70,95 @@ export default function Welcome() {
   };
 
   return (
-    <div
-      style={{
-        maxWidth: 400,
-        margin: "60px auto",
-        padding: 24,
-        borderRadius: 12,
-        boxShadow: "0 2px 12px #eee",
-        background: "#fff",
-      }}
-    >
-      <h2 style={{ textAlign: "center", color: "#222" }}>
-        {lang === "ru"
-          ? "Добро пожаловать в GOOD VIBE DAO"
-          : "Welcome to GOOD VIBE DAO"}
-      </h2>
-      {sessions.length > 0 && (
-        <div style={{ margin: "24px 0" }}>
-          <h3 style={{ color: "#444", fontSize: 18, marginBottom: 8 }}>
-            {lang === "ru" ? "Сохранённые сессии" : "Saved sessions"}
-          </h3>
-          <ul style={{ padding: 0, listStyle: "none" }}>
-            {sessions.map((s) => (
-              <li
-                key={s.id}
-                style={{
-                  marginBottom: 12,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  background: "#f7f7ff",
-                  borderRadius: 8,
-                  padding: "8px 12px",
-                }}
-              >
-                <span>
-                  <b>{s.name}</b>
-                  <span style={{ color: "#888", fontSize: 12, marginLeft: 8 }}>
-                    {new Date(s.created).toLocaleString(lang)}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  style={{
-                    background: "#e6e6ff",
-                    color: "#222",
-                    fontWeight: 600,
-                    border: "none",
-                    borderRadius: 6,
-                    padding: "6px 16px",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => handleSessionLogin(s)}
-                >
-                  {lang === "ru" ? "Войти" : "Login"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <form onSubmit={handleSubmit}>
-        <div style={{ margin: "16px 0" }}>
-          <label>{lang === "ru" ? "Имя" : "Name"}</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </div>
-        <div style={{ margin: "16px 0" }}>
-          <label>
-            {lang === "ru" ? "Пин-код (6+ цифр)" : "PIN code (6+ digits)"}
-          </label>
-          <input
-            type="password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-            minLength={6}
-            maxLength={12}
-            required
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </div>
-        <div style={{ margin: "16px 0" }}>
-          <label>{lang === "ru" ? "Язык" : "Language"}</label>
-          <select
-            value={lang}
-            onChange={(e) => setLang(e.target.value)}
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          >
-            {languages.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button
-          type="submit"
-          style={{
-            width: "100%",
-            padding: 12,
-            background: "#e6e6ff",
-            color: "#222",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 600,
-            fontSize: 18,
-          }}
-        >
-          {lang === "ru" ? "Далее" : "Next"}
-        </button>
-      </form>
+    <div className="min-h-screen flex items-center justify-center bg-background px-2">
+      <Card className="w-full max-w-md mx-auto">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-lg font-bold">
+            Добро пожаловать в GOOD VIBE DAO
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Тема</span>
+            <Switch checked={dark} onCheckedChange={setDark} />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {sessions.length > 0 && (
+            <div className="mb-6">
+              <div className="font-semibold text-base mb-2 text-muted-foreground">
+                Сохранённые сессии
+              </div>
+              <ul className="space-y-2">
+                {sessions.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-center justify-between bg-muted rounded-md px-3 py-2"
+                  >
+                    <div>
+                      <span className="font-medium">{s.name}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {new Date(s.created).toLocaleString(lang)}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleSessionLogin(s)}
+                    >
+                      Войти
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="name">Имя</Label>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoComplete="off"
+                placeholder="Введите имя"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pin">Пин-код (6+ цифр)</Label>
+              <Input
+                id="pin"
+                type="password"
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+                minLength={6}
+                maxLength={12}
+                required
+                autoComplete="off"
+                placeholder="Введите пин-код"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lang">Язык</Label>
+              <Select value={lang} onValueChange={setLang}>
+                <SelectTrigger className="w-full" id="lang">
+                  <SelectValue placeholder="Выберите язык" />
+                </SelectTrigger>
+                <SelectContent>
+                  {languages.map((l) => (
+                    <SelectItem key={l.code} value={l.code}>
+                      {l.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="submit" className="w-full text-base font-semibold">
+              Далее
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
