@@ -24,56 +24,67 @@ export default function SeedPhrase() {
   }, [dark]);
 
   useEffect(() => {
+    // Проверка наличия необходимых данных
+    const pin = localStorage.getItem("goodvibe_pin");
+    const name = localStorage.getItem("goodvibe_name");
+    if (!pin || !name) {
+      navigate("/");
+      return;
+    }
     // Генерируем seed-фразу только при первом рендере
     const m = generateMnemonic(english);
     setMnemonic(m.split(" "));
-    const account = mnemonicToAccount(m);
-    // Собираем все данные пользователя
-    const name = localStorage.getItem("goodvibe_name") || "";
-    const lang = localStorage.getItem("goodvibe_lang") || "ru";
-    const pin = localStorage.getItem("goodvibe_pin") || "";
-    const privKey = account.getHdKey().privateKey;
-    let hexPrivKey = "";
-    if (privKey) {
-      hexPrivKey = Array.from(privKey)
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-    }
-    const userData = {
-      name,
-      lang,
-      seed: m,
-      privateKey: hexPrivKey,
-      address: account.address,
-    };
-    // Шифруем и сохраняем
-    if (pin) {
-      encryptData(JSON.stringify(userData), pin).then((enc) => {
+    // account генерируется только для отображения seed, не сохраняем ничего в localStorage
+  }, []);
+
+  const handleNext = async () => {
+    if (step < mnemonic.length - 1) {
+      setStep(step + 1);
+    } else {
+      // Сохраняем данные пользователя и сессию только при завершении показа seed
+      const name = localStorage.getItem("goodvibe_name") || "";
+      const lang = localStorage.getItem("goodvibe_lang") || "ru";
+      const pin = localStorage.getItem("goodvibe_pin") || "";
+      const m = mnemonic.join(" ");
+      const account = mnemonicToAccount(m);
+      const privKey = account.getHdKey().privateKey;
+      let hexPrivKey = "";
+      if (privKey) {
+        hexPrivKey = Array.from(privKey)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
+      }
+      const userData = {
+        name,
+        lang,
+        seed: m,
+        privateKey: hexPrivKey,
+        address: account.address,
+      };
+      if (pin && name) {
+        const enc = await encryptData(JSON.stringify(userData), pin);
         localStorage.setItem(`goodvibe_userdata_${account.address}`, enc);
-        // Добавляем сессию в список
+        // Добавляем сессию в список, если её нет
         const sessionsRaw = localStorage.getItem("goodvibe_sessions");
         let sessions: { id: string; name: string; created: string }[] = [];
         try {
           if (sessionsRaw) sessions = JSON.parse(sessionsRaw);
         } catch {}
-        // id — адрес кошелька, name — имя, created — текущая дата
-        if (!sessions.find((s) => s.id === account.address)) {
-          sessions.push({
-            id: account.address,
-            name,
-            created: new Date().toISOString(),
-          });
-          localStorage.setItem("goodvibe_sessions", JSON.stringify(sessions));
-        }
-      });
-    }
-  }, []);
-
-  const handleNext = () => {
-    if (step < mnemonic.length - 1) {
-      setStep(step + 1);
-    } else {
-      navigate("/home");
+        // Удаляем дубликаты по id
+        const filtered = sessions.filter((s) => s.id !== account.address);
+        filtered.push({
+          id: account.address,
+          name,
+          created: new Date().toISOString(),
+        });
+        localStorage.setItem("goodvibe_sessions", JSON.stringify(filtered));
+        // Очищаем временные данные
+        localStorage.removeItem("goodvibe_name");
+        localStorage.removeItem("goodvibe_pin");
+        navigate("/");
+      } else {
+        alert("Нет данных пользователя или пин-кода");
+      }
     }
   };
 
@@ -104,6 +115,15 @@ export default function SeedPhrase() {
               >
                 {step < mnemonic.length - 1 ? "Далее" : "Готово"}
               </Button>
+              {step > 0 && (
+                <Button
+                  variant="secondary"
+                  className="w-full text-base font-semibold mt-2"
+                  onClick={() => setStep(step - 1)}
+                >
+                  Назад
+                </Button>
+              )}
             </>
           ) : (
             <div className="text-center text-muted-foreground py-8">
