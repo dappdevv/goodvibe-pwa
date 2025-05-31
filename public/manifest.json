@@ -1,0 +1,22 @@
+{
+  "name": "DAO GOOD VIBE",
+  "short_name": "GoodVibe",
+  "description": "DAO GOOD VIBE",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6c47ff",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/logo-192px.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/logo-512px.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

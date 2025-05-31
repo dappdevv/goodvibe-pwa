@@ -6,11 +6,11 @@ import SessionPin from "./screens/SessionPin";
 import MainNavigation from "./components/MainNavigation";
 import Profile from "./screens/Profile";
 import Wallet from "./screens/Wallet";
-import Map from "./screens/Map";
 import Exchange from "./screens/Exchange";
 import Ai from "./screens/Ai";
 import Contracts from "./screens/Contracts";
 import Docs from "./screens/Docs";
+import GoodVPN from "./pages/GoodVPN";
 import "./App.css";
 
 function AppContent() {
@@ -26,7 +26,7 @@ function AppContent() {
         <Route path="/session-pin" element={<SessionPin />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/wallet" element={<Wallet />} />
-        <Route path="/map" element={<Map />} />
+        <Route path="/goodvpn" element={<GoodVPN />} />
         <Route path="/exchange" element={<Exchange />} />
         <Route path="/ai" element={<Ai />} />
         <Route path="/contracts" element={<Contracts />} />

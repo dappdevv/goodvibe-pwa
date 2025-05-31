@@ -23,6 +23,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 
 const IPFS_CAT = import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "cat/";
 
@@ -60,6 +70,7 @@ export default function Home() {
     name: string;
     address: string;
     avatarHash?: string;
+    seed?: string;
   } | null>(null);
   const [balance, setBalance] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -113,6 +124,10 @@ export default function Home() {
   const [verifySuccess, setVerifySuccess] = useState("");
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [verifyReady, setVerifyReady] = useState(false);
+  const [showSeedDialog, setShowSeedDialog] = useState(false);
+  const [showSeedModal, setShowSeedModal] = useState(false);
+  const [seedWords, setSeedWords] = useState<string[]>([]);
+  const [seedStep, setSeedStep] = useState(0);
 
   useEffect(() => {
     const sessionId = localStorage.getItem("goodvibe_session_id");
@@ -179,13 +194,8 @@ export default function Home() {
     try {
       if (!user.address.startsWith("0x"))
         throw new Error("Адрес пользователя должен начинаться с 0x");
-      console.log(
-        "[Home] Запрашиваем данные пользователя для адреса:",
-        user.address
-      );
       (async () => {
         const data = await getUser(user.address as `0x${string}`);
-        console.log("[Home] Получены данные пользователя из контракта:", data);
         setDaoUser(data);
       })();
     } catch (e) {
@@ -480,17 +490,95 @@ export default function Home() {
             </Button>
           </div>
           {user && privateKey && (
-            <Button
-              variant="secondary"
-              className="w-full mb-4"
-              onClick={async () => {
-                await navigator.clipboard.writeText(privateKey!);
-                setPrivKeyCopied(true);
-                setTimeout(() => setPrivKeyCopied(false), 1200);
-              }}
-            >
-              {privKeyCopied ? "Скопировано!" : "Приватный ключ"}
-            </Button>
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(privateKey!);
+                  setPrivKeyCopied(true);
+                  setTimeout(() => setPrivKeyCopied(false), 1200);
+                }}
+              >
+                {privKeyCopied ? "Скопировано!" : "Приватный ключ"}
+              </Button>
+              <Button
+                variant="secondary"
+                className="w-full"
+                onClick={() => setShowSeedDialog(true)}
+              >
+                Seed фраза
+              </Button>
+            </div>
+          )}
+          {user && privateKey && (
+            <AlertDialog open={showSeedDialog} onOpenChange={setShowSeedDialog}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Показать seed фразу?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Seed фраза — это единственный способ восстановить доступ к
+                    кошельку. Никому не показывайте эти слова!
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      if (user?.seed) {
+                        setSeedWords(user.seed.split(" "));
+                        setSeedStep(0);
+                        setShowSeedDialog(false);
+                        setShowSeedModal(true);
+                      }
+                    }}
+                  >
+                    Показать
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          {showSeedModal && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+              <div className="bg-white dark:bg-zinc-900 rounded-lg p-6 w-full max-w-sm shadow-lg">
+                <h2 className="text-lg font-bold mb-4">Seed фраза</h2>
+                <div className="mb-4 text-center text-2xl font-mono select-all">
+                  {seedWords[seedStep]}
+                </div>
+                <div className="flex gap-2 justify-center mb-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setSeedStep((s) => Math.max(0, s - 1))}
+                    disabled={seedStep === 0}
+                  >
+                    Назад
+                  </Button>
+                  <Button
+                    onClick={() =>
+                      setSeedStep((s) => Math.min(seedWords.length - 1, s + 1))
+                    }
+                    disabled={seedStep === seedWords.length - 1}
+                  >
+                    Далее
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setShowSeedModal(false)}
+                  >
+                    Закрыть
+                  </Button>
+                </div>
+                <div className="text-xs text-muted-foreground mt-4 text-center">
+                  Никому не показывайте seed фразу!
+                  <br />
+                  Она даёт полный доступ к вашему кошельку.
+                </div>
+              </div>
+            </div>
           )}
           {daoUser && (
             <div className="bg-muted rounded-lg p-3 mb-4">

@@ -23,6 +23,8 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import { mnemonicToAccount } from "viem/accounts";
+import { encryptData } from "../utils/crypto";
 
 const languages = [
   { code: "ru", label: "Русский" },
@@ -58,6 +60,15 @@ export default function Login() {
     name: string;
     created: string;
   }>(null);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [showInstall, setShowInstall] = useState(false);
+  const [importModal, setImportModal] = useState(false);
+  const [importStep, setImportStep] = useState(0);
+  const [importSeed, setImportSeed] = useState<string[]>(Array(12).fill(""));
+  const [importName, setImportName] = useState("");
+  const [importPin, setImportPin] = useState("");
+  const [importError, setImportError] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
 
   useEffect(() => {
     setSessions(getSessions());
@@ -70,6 +81,16 @@ export default function Login() {
       document.documentElement.classList.remove("dark");
     }
   }, [dark]);
+
+  useEffect(() => {
+    function handler(e: any) {
+      e.preventDefault();
+      setInstallPrompt(e);
+      setShowInstall(true);
+    }
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,6 +120,21 @@ export default function Login() {
           </div>
         </CardHeader>
         <CardContent>
+          {showInstall && (
+            <Button
+              className="w-full mb-4"
+              variant="secondary"
+              onClick={async () => {
+                if (installPrompt) {
+                  installPrompt.prompt();
+                  await installPrompt.userChoice;
+                  setShowInstall(false);
+                }
+              }}
+            >
+              Установить приложение
+            </Button>
+          )}
           {sessions.length > 0 && (
             <div className="mb-6">
               <div className="font-semibold text-base mb-2 text-muted-foreground">
@@ -133,7 +169,6 @@ export default function Login() {
                           toast("Адрес кошелька скопирован", {
                             description: s.id,
                           });
-                          console.log("Информация о сессии:", s);
                         }}
                       >
                         Адрес
@@ -153,6 +188,20 @@ export default function Login() {
                   </li>
                 ))}
               </ul>
+              <Button
+                className="w-full mt-4"
+                variant="secondary"
+                onClick={() => {
+                  setImportModal(true);
+                  setImportStep(0);
+                  setImportSeed(Array(12).fill(""));
+                  setImportName("");
+                  setImportPin("");
+                  setImportError("");
+                }}
+              >
+                Импорт кошелька
+              </Button>
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -246,6 +295,174 @@ export default function Login() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {importModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-zinc-900 rounded-lg p-6 w-full max-w-sm shadow-lg">
+            <h2 className="text-lg font-bold mb-4">Импорт кошелька</h2>
+            {importStep < 12 ? (
+              <>
+                <div className="mb-2 text-sm text-muted-foreground">
+                  Введите слово {importStep + 1} из 12
+                </div>
+                <Input
+                  autoFocus
+                  className="mb-4"
+                  value={importSeed[importStep]}
+                  onChange={(e) => {
+                    const arr = [...importSeed];
+                    arr[importStep] = e.target.value.trim().toLowerCase();
+                    setImportSeed(arr);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && importSeed[importStep]) {
+                      setImportStep(importStep + 1);
+                    }
+                  }}
+                  placeholder={`Слово ${importStep + 1}`}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (importStep > 0) setImportStep(importStep - 1);
+                    }}
+                    disabled={importStep === 0}
+                  >
+                    Назад
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (importSeed[importStep]) setImportStep(importStep + 1);
+                    }}
+                    disabled={!importSeed[importStep]}
+                  >
+                    Далее
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setImportError("");
+                  setImportLoading(true);
+                  try {
+                    if (importSeed.some((w) => !w)) {
+                      setImportError("Введите все 12 слов");
+                      setImportLoading(false);
+                      return;
+                    }
+                    if (!importName.trim()) {
+                      setImportError("Введите название сессии");
+                      setImportLoading(false);
+                      return;
+                    }
+                    if (importPin.length < 6) {
+                      setImportError("Пин-код минимум 6 цифр");
+                      setImportLoading(false);
+                      return;
+                    }
+                    const phrase = importSeed.join(" ").trim();
+                    const account = mnemonicToAccount(phrase);
+                    const privKey = account.getHdKey().privateKey;
+                    let hexPrivKey = "";
+                    if (privKey) {
+                      hexPrivKey = Array.from(privKey)
+                        .map((b) => b.toString(16).padStart(2, "0"))
+                        .join("");
+                    }
+                    const userData = {
+                      name: importName,
+                      lang,
+                      seed: phrase,
+                      privateKey: hexPrivKey,
+                      address: account.address,
+                    };
+                    const enc = await encryptData(
+                      JSON.stringify(userData),
+                      importPin
+                    );
+                    localStorage.setItem(
+                      `goodvibe_userdata_${account.address}`,
+                      enc
+                    );
+                    // Добавляем сессию в список
+                    const sessionsRaw =
+                      localStorage.getItem("goodvibe_sessions");
+                    let sessionsArr: {
+                      id: string;
+                      name: string;
+                      created: string;
+                    }[] = [];
+                    try {
+                      if (sessionsRaw) sessionsArr = JSON.parse(sessionsRaw);
+                    } catch {}
+                    // Удаляем дубликаты по id
+                    const filtered = sessionsArr.filter(
+                      (s) => s.id !== account.address
+                    );
+                    filtered.push({
+                      id: account.address,
+                      name: importName,
+                      created: new Date().toISOString(),
+                    });
+                    localStorage.setItem(
+                      "goodvibe_sessions",
+                      JSON.stringify(filtered)
+                    );
+                    setImportModal(false);
+                    setImportLoading(false);
+                    localStorage.setItem(
+                      "goodvibe_session_id",
+                      account.address
+                    );
+                    localStorage.setItem("goodvibe_pin", importPin);
+                    navigate("/session-pin");
+                  } catch (e) {
+                    setImportError("Ошибка импорта seed-фразы");
+                    setImportLoading(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <Input
+                  placeholder="Название сессии"
+                  value={importName}
+                  onChange={(e) => setImportName(e.target.value)}
+                  required
+                />
+                <Input
+                  placeholder="Пин-код (6+ цифр)"
+                  type="password"
+                  value={importPin}
+                  onChange={(e) =>
+                    setImportPin(e.target.value.replace(/\D/g, ""))
+                  }
+                  minLength={6}
+                  maxLength={12}
+                  required
+                />
+                {importError && (
+                  <div className="text-red-500 text-sm">{importError}</div>
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setImportModal(false)}
+                    disabled={importLoading}
+                  >
+                    Отмена
+                  </Button>
+                  <Button type="submit" disabled={importLoading}>
+                    {importLoading ? "Импорт..." : "Импортировать"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

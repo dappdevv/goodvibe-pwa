@@ -10,7 +10,7 @@ const navItems = [
   { label: "Главная", to: "/home" },
   { label: "Профиль", to: "/profile" },
   { label: "Кошелёк", to: "/wallet" },
-  { label: "Карта", to: "/map" },
+  { label: "GoodVPN", to: "/goodvpn" },
   { label: "Биржа", to: "/exchange" },
   { label: "ИИ ассистент", to: "/ai" },
   { label: "Контракты", to: "/contracts" },
