@@ -29,8 +29,10 @@ dist-ssr
 
 # env
 .env
+.env.*
 node_modules
-.env
+.env.production
+.env.development
 
 # Hardhat files
 /cache

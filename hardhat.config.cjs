@@ -28,10 +28,10 @@ module.exports = {
       accounts: [privateKeyFounder],
     },
     GoodVibeTestnet: {
-      chainId: 22052024,
+      chainId: 22052024, // TESTNET ID
       gasPrice: "auto",
       gas: "auto",
-      url: process.env.VITE_GOODVIBE_CHAIN_RPC_WITH_CREDENTIALS,
+      url: process.env.VITE_GOODVIBE_CHAIN_RPC_TESTNET,
       accounts: [privateKeyFounder],
     },
   },
