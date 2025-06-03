@@ -33,6 +33,8 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+import { KeyRound, KeySquare } from "lucide-react";
 
 const IPFS_CAT = import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "cat/";
 
@@ -320,7 +322,7 @@ export default function Home() {
         userData.privateKey
       );
       await createInvite(walletClient, inviteAddress as `0x${string}`);
-      alert("Приглашение успешно создано!");
+      toast("Приглашение успешно создано!");
       setShowInviteModal(false);
       setInviteAddress("");
     } catch (e: any) {
@@ -490,24 +492,35 @@ export default function Home() {
             </Button>
           </div>
           {user && privateKey && (
-            <div className="flex gap-2 mb-4">
+            <div className="flex flex-col sm:flex-row gap-2 mb-4 w-full">
               <Button
                 variant="secondary"
-                className="w-full"
+                className="flex-1 flex items-center justify-center gap-2"
                 onClick={async () => {
                   await navigator.clipboard.writeText(privateKey!);
                   setPrivKeyCopied(true);
                   setTimeout(() => setPrivKeyCopied(false), 1200);
                 }}
+                aria-label="Скопировать приватный ключ"
               >
-                {privKeyCopied ? "Скопировано!" : "Приватный ключ"}
+                <KeySquare className="w-5 h-5" />
+                <span className="hidden xs:inline">Приватный ключ</span>
+                <span className="inline xs:hidden">Ключ</span>
+                {privKeyCopied && (
+                  <span className="text-primary text-xs ml-2">
+                    Скопировано!
+                  </span>
+                )}
               </Button>
               <Button
                 variant="secondary"
-                className="w-full"
+                className="flex-1 flex items-center justify-center gap-2"
                 onClick={() => setShowSeedDialog(true)}
+                aria-label="Показать seed фразу"
               >
-                Seed фраза
+                <KeyRound className="w-5 h-5" />
+                <span className="hidden xs:inline">Seed фраза</span>
+                <span className="inline xs:hidden">Seed</span>
               </Button>
             </div>
           )}
@@ -915,7 +928,7 @@ export default function Home() {
                         setVerificationPhoto(null);
                         setVerificationPhotoPreview("");
                         setVerificationError("");
-                        alert("Верификация отправлена!");
+                        toast("Верификация отправлена!");
                       } catch (e: any) {
                         setVerificationError(
                           e?.message || "Ошибка отправки верификации"
@@ -1063,7 +1076,7 @@ export default function Home() {
                         setShowRegisterModal(false);
                         setRegisterName("");
                         setRegisterError("");
-                        alert(`Регистрация отправлена!\nHash: ${hash}`);
+                        toast(`Регистрация отправлена!\nHash: ${hash}`);
                         // Обновить данные пользователя после регистрации
                         if (userData.address) {
                           const updated = await getUser(userData.address);
@@ -1191,7 +1204,7 @@ export default function Home() {
                     setSendTo("");
                     setSendAmount("");
                     setSendError("");
-                    alert(`Транзакция отправлена!\nHash: ${hash}`);
+                    toast(`Транзакция отправлена!\nHash: ${hash}`);
                   } catch (e: any) {
                     console.error(e);
                     setSendError(

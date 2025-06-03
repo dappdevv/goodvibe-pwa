@@ -116,7 +116,7 @@ export default function Profile() {
   };
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto py-8 px-2 sm:px-4">
       <h1 className="text-2xl font-bold mb-4">Профиль</h1>
       <div className="flex flex-col items-center mb-6">
         <div className="relative w-24 h-24 mb-2">

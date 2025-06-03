@@ -1,9 +1,10 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export default function GoodVPN() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-2">
-      <Card className="w-full max-w-lg mx-auto">
+      <Card className="w-full max-w-full sm:max-w-lg mx-auto px-2 sm:px-4">
         <CardHeader>
           <CardTitle className="text-lg font-bold">GoodVPN</CardTitle>
         </CardHeader>
@@ -22,6 +23,50 @@ export default function GoodVPN() {
           <div className="mt-6 text-sm text-muted-foreground">
             Подключение и инструкции появятся в ближайших обновлениях.
           </div>
+          <Button
+            className="mt-6 w-full"
+            onClick={async () => {
+              const cid = import.meta.env.VITE_GOOD_VPN_CID;
+              let endpoint =
+                import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "cat/" + cid;
+              let fetchOptions: RequestInit = { method: "POST" };
+              try {
+                try {
+                  const url = new URL(endpoint);
+                  if (url.username && url.password) {
+                    endpoint = endpoint.replace(
+                      `${url.username}:${url.password}@`,
+                      ""
+                    );
+                    fetchOptions.headers = {
+                      ...(fetchOptions.headers || {}),
+                      Authorization:
+                        "Basic " + btoa(`${url.username}:${url.password}`),
+                    };
+                  }
+                } catch {}
+                const response = await fetch(endpoint, fetchOptions);
+                if (!response.ok) throw new Error("Ошибка загрузки файла");
+                const blob = await response.blob();
+                const urlObj = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = urlObj;
+                a.download = "GoodVPN.apk";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(urlObj);
+              } catch (e) {
+                const err = e as any;
+                alert(
+                  "Ошибка скачивания файла: " +
+                    (err && err.message ? err.message : String(e))
+                );
+              }
+            }}
+          >
+            Скачать GoodVPN
+          </Button>
         </CardContent>
       </Card>
     </div>

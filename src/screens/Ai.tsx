@@ -17,6 +17,7 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner";
 
 // Модели (захардкожены для примера, можно подгружать динамически)
 const TEXT_MODELS = [
@@ -120,7 +121,7 @@ export default function Ai() {
     if (
       !("webkitSpeechRecognition" in window || "SpeechRecognition" in window)
     ) {
-      alert("Голосовой ввод не поддерживается в этом браузере");
+      toast("Голосовой ввод не поддерживается в этом браузере");
       return;
     }
     const SpeechRecognition =
@@ -239,7 +240,7 @@ export default function Ai() {
 
   return (
     <div className="flex flex-col items-center w-full min-h-screen bg-background py-4">
-      <Card className="w-full max-w-2xl mx-auto flex flex-col h-[80vh]">
+      <Card className="w-full max-w-2xl mx-auto flex flex-col h-[80vh] px-2 sm:px-4">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-lg font-bold">
             ИИ ассистент Pollinations

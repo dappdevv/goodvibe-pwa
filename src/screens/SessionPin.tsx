@@ -51,7 +51,7 @@ export default function SessionPin() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-2">
-      <Card className="w-full max-w-md mx-auto">
+      <Card className="w-full max-w-full sm:max-w-md mx-auto px-2 sm:px-4">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-lg font-bold">Введите пин-код</CardTitle>
           <div className="flex items-center gap-2">

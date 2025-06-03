@@ -5,6 +5,7 @@ import { encryptData } from "../utils/crypto";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 
 export default function SeedPhrase() {
   const navigate = useNavigate();
@@ -83,7 +84,7 @@ export default function SeedPhrase() {
         localStorage.removeItem("goodvibe_pin");
         navigate("/");
       } else {
-        alert("Нет данных пользователя или пин-кода");
+        toast("Нет данных пользователя или пин-кода");
       }
     }
   };

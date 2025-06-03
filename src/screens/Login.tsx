@@ -121,19 +121,30 @@ export default function Login() {
         </CardHeader>
         <CardContent>
           {showInstall && (
-            <Button
-              className="w-full mb-4"
-              variant="secondary"
-              onClick={async () => {
-                if (installPrompt) {
-                  installPrompt.prompt();
-                  await installPrompt.userChoice;
-                  setShowInstall(false);
-                }
-              }}
-            >
-              Установить приложение
-            </Button>
+            <AlertDialog open={showInstall} onOpenChange={setShowInstall}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Установить приложение?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Вы хотите установить GOOD VIBE DAO как PWA?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async () => {
+                      if (installPrompt) {
+                        installPrompt.prompt();
+                        await installPrompt.userChoice;
+                        setShowInstall(false);
+                      }
+                    }}
+                  >
+                    Установить
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
           {sessions.length > 0 && (
             <div className="mb-6">

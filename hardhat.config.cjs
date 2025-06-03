@@ -4,6 +4,7 @@ require("@nomicfoundation/hardhat-toolbox");
 console.log("RPC", process.env.VITE_GOODVIBE_CHAIN_RPC_WITH_CREDENTIALS);
 
 const privateKeyFounder = process.env.TEST_FOUNDER_PKEY;
+// const privateKeyFounder = process.env.FOUNDER_PKEY;
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -11,7 +12,7 @@ module.exports = {
   settings: {
     optimizer: {
       enabled: true,
-      runs: 333,
+      runs: 100,
     },
     viaIR: true,
     evmVersion: "paris",
@@ -19,6 +20,13 @@ module.exports = {
   defaultNetwork: "GoodVibeTestnet",
   networks: {
     hardhat: {},
+    GoodVibe: {
+      chainId: 22052025,
+      gasPrice: "auto",
+      gas: "auto",
+      url: process.env.VITE_GOODVIBE_CHAIN_RPC_WITH_CREDENTIALS,
+      accounts: [privateKeyFounder],
+    },
     GoodVibeTestnet: {
       chainId: 22052024,
       gasPrice: "auto",

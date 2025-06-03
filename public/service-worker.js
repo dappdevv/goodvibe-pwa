@@ -3,6 +3,8 @@ const urlsToCache = [
   "/",
   "/index.html",
   "/manifest.json",
+  "/icons/logo-192px.png",
+  "/icons/logo-512px.png",
   // Добавьте сюда пути к иконкам и основным ассетам
 ];
 
