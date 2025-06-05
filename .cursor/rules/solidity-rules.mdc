@@ -1,0 +1,9 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- Use with rules for Solidity code
+- Always write documentation for code.
+- Always comment code in russian language.
+- Always use english language for error messages ('require' and others).
