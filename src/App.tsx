@@ -10,7 +10,7 @@ import Exchange from "./screens/Exchange";
 import Ai from "./screens/Ai";
 import Contracts from "./screens/Contracts";
 import Docs from "./screens/Docs";
-import GoodVPN from "./pages/GoodVPN";
+import GoodVPN from "./screens/GoodVPN";
 import "./App.css";
 
 function AppContent() {

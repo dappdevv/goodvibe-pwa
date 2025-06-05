@@ -36,7 +36,7 @@ import {
 import { toast } from "sonner";
 import { KeyRound, KeySquare } from "lucide-react";
 
-const IPFS_CAT = import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "cat/";
+const IPFS_CAT = import.meta.env.VITE_IPFS_ENDPOINT + "cat/";
 
 // Статусы пользователя в DAO
 const UserStatus = {
@@ -380,16 +380,14 @@ export default function Home() {
       // Загружаем фото с IPFS
       let endpoint = IPFS_CAT + photoCID;
       let fetchOptions: RequestInit = { method: "POST" };
-      try {
-        const url = new URL(endpoint);
-        if (url.username && url.password) {
-          endpoint = endpoint.replace(`${url.username}:${url.password}@`, "");
-          fetchOptions.headers = {
-            ...(fetchOptions.headers || {}),
-            Authorization: "Basic " + btoa(`${url.username}:${url.password}`),
-          };
-        }
-      } catch {}
+      // Если есть переменная окружения для авторизации — используем её
+      if (import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION) {
+        fetchOptions.headers = {
+          ...(fetchOptions.headers || {}),
+          // Устанавливаем заголовок авторизации из переменной окружения
+          Authorization: import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION,
+        };
+      }
       const res = await fetch(endpoint, fetchOptions);
       if (!res.ok) {
         setVerifyError("Ошибка загрузки фото с IPFS");
@@ -856,26 +854,20 @@ export default function Home() {
                         });
                         formData.append("path", blob, "photo.enc");
                         let endpoint =
-                          import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "add";
+                          import.meta.env.VITE_IPFS_ENDPOINT + "add";
                         let fetchOptions: RequestInit = {
                           method: "POST",
                           body: formData,
                         };
-                        try {
-                          const url = new URL(endpoint);
-                          if (url.username && url.password) {
-                            endpoint = endpoint.replace(
-                              `${url.username}:${url.password}@`,
-                              ""
-                            );
-                            fetchOptions.headers = {
-                              ...(fetchOptions.headers || {}),
-                              Authorization:
-                                "Basic " +
-                                btoa(`${url.username}:${url.password}`),
-                            };
-                          }
-                        } catch {}
+                        // Если есть переменная окружения для авторизации — используем её
+                        if (import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION) {
+                          fetchOptions.headers = {
+                            ...(fetchOptions.headers || {}),
+                            // Устанавливаем заголовок авторизации из переменной окружения
+                            Authorization: import.meta.env
+                              .VITE_IPFS_ENDPOINT_AUTHORIZATION,
+                          };
+                        }
                         const res = await fetch(endpoint, fetchOptions);
                         if (!res.ok)
                           throw new Error("Ошибка загрузки фото на IPFS");

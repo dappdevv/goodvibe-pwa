@@ -27,24 +27,16 @@ export default function GoodVPN() {
             className="mt-6 w-full"
             onClick={async () => {
               const cid = import.meta.env.VITE_GOOD_VPN_CID;
-              let endpoint =
-                import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "cat/" + cid;
+              let endpoint = import.meta.env.VITE_IPFS_ENDPOINT + "cat/" + cid;
               let fetchOptions: RequestInit = { method: "POST" };
+              if (import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION) {
+                fetchOptions.headers = {
+                  ...(fetchOptions.headers || {}),
+                  Authorization: import.meta.env
+                    .VITE_IPFS_ENDPOINT_AUTHORIZATION,
+                };
+              }
               try {
-                try {
-                  const url = new URL(endpoint);
-                  if (url.username && url.password) {
-                    endpoint = endpoint.replace(
-                      `${url.username}:${url.password}@`,
-                      ""
-                    );
-                    fetchOptions.headers = {
-                      ...(fetchOptions.headers || {}),
-                      Authorization:
-                        "Basic " + btoa(`${url.username}:${url.password}`),
-                    };
-                  }
-                } catch {}
                 const response = await fetch(endpoint, fetchOptions);
                 if (!response.ok) throw new Error("Ошибка загрузки файла");
                 const blob = await response.blob();

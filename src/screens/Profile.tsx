@@ -3,7 +3,7 @@ import goodVibeLogo from "../assets/good-vibe-logo.png";
 import { decryptData, encryptData } from "../utils/crypto";
 import { Button } from "@/components/ui/button";
 
-const IPFS_CAT = import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "cat/";
+const IPFS_CAT = import.meta.env.VITE_IPFS_ENDPOINT + "cat/";
 
 export default function Profile() {
   const [user, setUser] = useState<{
@@ -32,20 +32,12 @@ export default function Profile() {
           try {
             let endpoint = IPFS_CAT + data.avatarHash;
             let fetchOptions: RequestInit = { method: "POST" };
-            try {
-              const url = new URL(endpoint);
-              if (url.username && url.password) {
-                endpoint = endpoint.replace(
-                  `${url.username}:${url.password}@`,
-                  ""
-                );
-                fetchOptions.headers = {
-                  ...(fetchOptions.headers || {}),
-                  Authorization:
-                    "Basic " + btoa(`${url.username}:${url.password}`),
-                };
-              }
-            } catch {}
+            if (import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION) {
+              fetchOptions.headers = {
+                ...(fetchOptions.headers || {}),
+                Authorization: import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION,
+              };
+            }
             const res = await fetch(endpoint, fetchOptions);
             if (res.ok) {
               const blob = await res.blob();
@@ -69,18 +61,14 @@ export default function Profile() {
     try {
       const formData = new FormData();
       formData.append("path", file);
-      let endpoint = import.meta.env.VITE_GOODVIBE_IPFS_ENDPOINT + "add";
+      let endpoint = import.meta.env.VITE_IPFS_ENDPOINT + "add";
       let fetchOptions: RequestInit = { method: "POST", body: formData };
-      try {
-        const url = new URL(endpoint);
-        if (url.username && url.password) {
-          endpoint = endpoint.replace(`${url.username}:${url.password}@`, "");
-          fetchOptions.headers = {
-            ...fetchOptions.headers,
-            Authorization: "Basic " + btoa(`${url.username}:${url.password}`),
-          };
-        }
-      } catch {}
+      if (import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION) {
+        fetchOptions.headers = {
+          ...fetchOptions.headers,
+          Authorization: import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION,
+        };
+      }
       const res = await fetch(endpoint, fetchOptions);
       if (!res.ok) {
         setLoadingAvatar(false);
