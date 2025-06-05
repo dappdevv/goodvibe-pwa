@@ -4,6 +4,7 @@ import "./index.css";
 import App from "./App.tsx";
 import { Toaster } from "@/components/ui/sonner";
 import { registerSW } from "virtual:pwa-register";
+import { toast } from "sonner";
 
 registerSW({
   onNeedRefresh() {
@@ -11,8 +12,8 @@ registerSW({
     window.location.reload();
   },
   onOfflineReady() {
-    // Можно показать уведомление, что приложение доступно оффлайн
-    // alert('Приложение готово к работе оффлайн!');
+    // Показываем уведомление через Toaster
+    toast("Приложение готово к работе оффлайн!");
   },
 });
 
@@ -22,12 +23,3 @@ createRoot(document.getElementById("root")!).render(
     <Toaster />
   </StrictMode>
 );
-
-// Регистрация service worker для PWA
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js").catch((err) => {
-      console.warn("Service worker registration failed:", err);
-    });
-  });
-}

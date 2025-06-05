@@ -3,6 +3,8 @@
   "short_name": "GoodVibe",
   "description": "DAO GOOD VIBE",
   "start_url": ".",
+  "scope": "/",
+  "lang": "ru",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#6c47ff",

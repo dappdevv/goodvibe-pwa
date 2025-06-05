@@ -10,8 +10,10 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate", // Важно!
-      // Можно добавить workbox: { clientsClaim: true, skipWaiting: true }
-      // для мгновенного обновления, если используете версию <0.12.2
+      workbox: {
+        clientsClaim: true,
+        skipWaiting: true,
+      },
     }),
   ],
   resolve: {
