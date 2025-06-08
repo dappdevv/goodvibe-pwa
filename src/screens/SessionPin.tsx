@@ -50,7 +50,7 @@ export default function SessionPin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-2">
+    <div className="min-h-screen flex items-center justify-center bg-background px-2 sm:px-4">
       <Card className="w-full max-w-full sm:max-w-md mx-auto px-2 sm:px-4">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-lg font-bold">Введите пин-код</CardTitle>
@@ -73,6 +73,7 @@ export default function SessionPin() {
                 required
                 autoComplete="off"
                 placeholder="Введите пин-код"
+                className="w-full"
               />
             </div>
             {error && (

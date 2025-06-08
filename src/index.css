@@ -166,3 +166,9 @@ h1 {
     @apply bg-background text-foreground;
   }
 }
+
+@media (max-width: 640px) {
+  body {
+    overflow-x: hidden;
+  }
+}

@@ -427,9 +427,10 @@ export default function Home() {
     );
   }
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-2">
-      <Card className="w-full max-w-lg sm:max-w-xl md:max-w-2xl mx-auto px-2 sm:px-4">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
+    <div className="w-full min-h-screen max-w-screen overflow-x-hidden flex items-center justify-center bg-background px-2 sm:px-4 pt-20">
+      {/* Карточка: ограничиваем ширину, убираем лишние paddings */}
+      <Card className="w-full max-w-lg mx-auto px-2 sm:px-4">
+        <CardHeader className="flex flex-row items-center justify-between pb-2 min-w-0">
           <CardTitle className="text-lg font-bold">Главная</CardTitle>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Тема</span>
@@ -442,7 +443,7 @@ export default function Home() {
           </div>
           <div className="flex flex-col sm:flex-row items-center mb-2 break-all w-full">
             <b>Адрес:</b>
-            <span className="font-mono ml-2 break-all w-full max-w-full overflow-x-auto whitespace-pre-wrap">
+            <span className="font-mono ml-2 break-all w-full max-w-full overflow-x-auto whitespace-pre-wrap scrollbar-thin scrollbar-thumb-muted-foreground/30">
               {user.address}
             </span>
             <Button
@@ -551,8 +552,8 @@ export default function Home() {
             </AlertDialog>
           )}
           {showSeedModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-              <div className="bg-white dark:bg-zinc-900 rounded-lg p-6 w-full max-w-sm shadow-lg">
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-2 sm:px-0">
+              <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 sm:p-6 w-full max-w-xs sm:max-w-sm shadow-lg max-h-[90vh] overflow-y-auto">
                 <h2 className="text-lg font-bold mb-4">Seed фраза</h2>
                 <div className="mb-4 text-center text-2xl font-mono select-all">
                   {seedWords[seedStep]}
@@ -682,8 +683,8 @@ export default function Home() {
             </div>
           )}
           {showVerificationModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-              <div className="bg-white p-8 rounded-lg max-w-md">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0">
+              <div className="bg-white p-4 sm:p-8 rounded-lg w-full max-w-xs sm:max-w-md mx-auto max-h-[90vh] overflow-y-auto">
                 <h3 className="text-lg font-bold mb-4">
                   Верификация пользователя
                 </h3>
@@ -946,8 +947,8 @@ export default function Home() {
             </Button>
           )}
           {showInviteModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2">
-              <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0">
+              <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
                 <h3 className="text-lg font-bold mb-4">Создание приглашения</h3>
                 <Input
                   type="text"
@@ -984,8 +985,8 @@ export default function Home() {
             </div>
           )}
           {showRegisterModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2">
-              <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0">
+              <div className="bg-white p-4 sm:p-6 rounded-lg w-full max-w-xs sm:max-w-md mx-auto max-h-[90vh] overflow-y-auto">
                 <h3 className="text-lg font-bold mb-4">
                   Регистрация пользователя
                 </h3>
@@ -1117,8 +1118,8 @@ export default function Home() {
         </CardFooter>
       </Card>
       {showSendModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0">
+          <div className="bg-white p-4 sm:p-6 rounded-lg w-full max-w-xs sm:max-w-md mx-auto max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">Отправить токены</h3>
             <Input
               type="text"
@@ -1217,8 +1218,8 @@ export default function Home() {
         </div>
       )}
       {showImportModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0">
+          <div className="bg-white p-4 sm:p-6 rounded-lg w-full max-w-xs sm:max-w-md mx-auto max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">Импорт кошелька</h3>
             <div className="flex flex-wrap gap-2">
               {importSeed.map((word, idx) => (
@@ -1313,8 +1314,8 @@ export default function Home() {
         </div>
       )}
       {showVerifierModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2">
-          <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0">
+          <div className="bg-white p-4 sm:p-6 rounded-lg w-full max-w-xs sm:max-w-md mx-auto max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">Верификация пользователя</h3>
             <Input
               type="text"

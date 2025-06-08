@@ -108,8 +108,8 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-2">
-      <Card className="w-full max-w-md mx-auto">
+    <div className="min-h-screen flex items-center justify-center bg-background px-2 sm:px-4">
+      <Card className="w-full max-w-full sm:max-w-md mx-auto px-2 sm:px-4">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-lg font-bold">
             Добро пожаловать в GOOD VIBE DAO
@@ -155,15 +155,15 @@ export default function Login() {
                 {sessions.map((s) => (
                   <li
                     key={s.id}
-                    className="flex items-center justify-between bg-muted rounded-md px-3 py-2"
+                    className="flex flex-col sm:flex-row items-center justify-between bg-muted rounded-md px-3 py-2 gap-2 sm:gap-0"
                   >
-                    <div>
+                    <div className="w-full sm:w-auto overflow-x-auto break-all scrollbar-thin scrollbar-thumb-muted-foreground/30">
                       <span className="font-medium">{s.name}</span>
                       <span className="ml-2 text-xs text-muted-foreground">
                         {new Date(s.created).toLocaleString(lang)}
                       </span>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap justify-end w-full sm:w-auto">
                       <Button
                         type="button"
                         size="sm"
@@ -307,8 +307,8 @@ export default function Login() {
         </AlertDialogContent>
       </AlertDialog>
       {importModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-zinc-900 rounded-lg p-6 w-full max-w-sm shadow-lg">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-2 sm:px-0">
+          <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 sm:p-6 w-full max-w-xs sm:max-w-sm shadow-lg max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold mb-4">Импорт кошелька</h2>
             {importStep < 12 ? (
               <>
