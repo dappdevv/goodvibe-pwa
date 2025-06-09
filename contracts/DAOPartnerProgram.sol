@@ -51,6 +51,7 @@ contract DAOPartnerProgram {
         daoGovernance = _daoGovernance;
         // Регистрируем основателя как первого партнёра
         partners[_founder].status = PartnerStatus.Active;
+        partners[_founder].referrer = _founder;
     }
 
     /// @notice Регистрация нового партнёра

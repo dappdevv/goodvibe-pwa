@@ -116,4 +116,7 @@ contract DAOServices {
     function getBalance() external view returns (uint256) {
         return address(this).balance;
     }
+
+    /// @notice Приём ETH для работы с GoodVPN
+    receive() external payable {}
 } 

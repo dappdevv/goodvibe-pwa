@@ -35,6 +35,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { KeyRound, KeySquare } from "lucide-react";
+import DAOPartnerProgramAbi from "../blockchain/abi/DAOPartnerProgram.json";
+import DAOPartnerProgramAddress from "../blockchain/addresses/DAOPartnerProgram.json";
 
 const IPFS_CAT = import.meta.env.VITE_IPFS_ENDPOINT + "cat/";
 
@@ -66,6 +68,16 @@ interface VerificationStruct {
   independentInspection: string;
   verificationHash: string;
 }
+
+// --- DAOPartnerProgram UI ---
+// Статусы партнёра
+const PartnerStatusLabels = [
+  "Нет", // 0
+  "Активный", // 1
+  "Неактивный", // 2
+  "Заблокирован", // 3
+  "Приостановлен", // 4
+];
 
 export default function Home() {
   const [user, setUser] = useState<{
@@ -130,6 +142,18 @@ export default function Home() {
   const [showSeedModal, setShowSeedModal] = useState(false);
   const [seedWords, setSeedWords] = useState<string[]>([]);
   const [seedStep, setSeedStep] = useState(0);
+  // DAOPartnerProgram state
+  const [partnerStatus, setPartnerStatus] = useState<number | null>(null);
+  const [partnerReferrer, setPartnerReferrer] = useState<string>("");
+  const [firstLevelReferrals, setFirstLevelReferrals] = useState<string[]>([]);
+  const [maxFirstLevel, setMaxFirstLevel] = useState<number | null>(null);
+  const [referrerInput, setReferrerInput] = useState("");
+  const [partnerLoading, setPartnerLoading] = useState(false);
+  const [partnerError, setPartnerError] = useState("");
+  const [levelInput, setLevelInput] = useState(2);
+  const [levelReferrals, setLevelReferrals] = useState<string[]>([]);
+  const [levelLoading, setLevelLoading] = useState(false);
+  const [levelError, setLevelError] = useState("");
 
   useEffect(() => {
     const sessionId = localStorage.getItem("goodvibe_session_id");
@@ -412,6 +436,104 @@ export default function Home() {
       setVerifyError(e?.message || "Ошибка расшифровки фото");
     }
     setVerifyPhotoLoading(false);
+  };
+
+  // Загрузка данных партнёра
+  const loadPartnerData = async () => {
+    if (!user) return;
+    setPartnerLoading(true);
+    setPartnerError("");
+    try {
+      // Получаем referrer и статус
+      const res = (await publicClient.readContract({
+        address: DAOPartnerProgramAddress.address as Address,
+        abi: DAOPartnerProgramAbi,
+        functionName: "partners",
+        args: [user.address as Address],
+      })) as [string, number];
+      setPartnerReferrer(res[0]);
+      setPartnerStatus(Number(res[1]));
+      // Получаем лимит
+      const max = await publicClient.readContract({
+        address: DAOPartnerProgramAddress.address as Address,
+        abi: DAOPartnerProgramAbi,
+        functionName: "getMaxFirstLevelReferrals",
+        args: [user.address as Address],
+      });
+      setMaxFirstLevel(Number(max));
+      // Получаем рефералов первого уровня
+      const refs = await publicClient.readContract({
+        address: DAOPartnerProgramAddress.address as Address,
+        abi: DAOPartnerProgramAbi,
+        functionName: "getFirstLevelReferrals",
+        args: [user.address as Address],
+      });
+      setFirstLevelReferrals(refs as string[]);
+    } catch (e: any) {
+      setPartnerError(e?.message || "Ошибка загрузки данных партнёра");
+    }
+    setPartnerLoading(false);
+  };
+
+  useEffect(() => {
+    if (user) loadPartnerData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // Загрузка рефералов на уровне
+  const handleLoadLevel = async () => {
+    setLevelLoading(true);
+    setLevelError("");
+    try {
+      const refs = await publicClient.readContract({
+        address: DAOPartnerProgramAddress.address as Address,
+        abi: DAOPartnerProgramAbi,
+        functionName: "getReferralsAtLevel",
+        args: [user?.address as Address, levelInput],
+      });
+      setLevelReferrals(refs as string[]);
+    } catch (e: any) {
+      setLevelError(e?.message || "Ошибка загрузки рефералов");
+    }
+    setLevelLoading(false);
+  };
+
+  // Регистрация в партнёрской программе
+  const handleRegisterPartner = async () => {
+    setPartnerError("");
+    setPartnerLoading(true);
+    try {
+      if (!isAddress(referrerInput)) {
+        setPartnerError("Некорректный адрес реферера");
+        setPartnerLoading(false);
+        return;
+      }
+      const sessionId = localStorage.getItem("goodvibe_session_id");
+      const encrypted = sessionId
+        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
+        : null;
+      const pin = localStorage.getItem("goodvibe_pin");
+      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
+      const decrypted = await decryptData(encrypted, pin);
+      const userData = JSON.parse(decrypted);
+      const walletClient = createWalletClientFromPrivateKey(
+        userData.privateKey
+      );
+      await walletClient.writeContract({
+        address: DAOPartnerProgramAddress.address as Address,
+        abi: DAOPartnerProgramAbi,
+        functionName: "register",
+        args: [referrerInput],
+        chain: walletClient.chain,
+        account: walletClient.account ?? null,
+      });
+      setReferrerInput("");
+      toast("Регистрация успешна! Ожидайте подтверждения.");
+      await loadPartnerData();
+    } catch (e: any) {
+      setPartnerError(e?.shortMessage || e?.message || "Ошибка регистрации");
+    }
+    setPartnerLoading(false);
   };
 
   if (error) {
@@ -1094,6 +1216,126 @@ export default function Home() {
               </div>
             </div>
           )}
+          {/* --- DAOPartnerProgram UI --- */}
+          <div className="w-full max-w-lg mx-auto mt-8 mb-8 p-4 bg-muted rounded-lg">
+            <h2 className="text-xl font-bold mb-4">Партнёрская программа</h2>
+            {partnerLoading ? (
+              <div className="text-center text-muted-foreground">
+                Загрузка...
+              </div>
+            ) : (
+              <>
+                {partnerStatus === 0 && (
+                  <div className="mb-4">
+                    <div className="mb-2">
+                      Вы не зарегистрированы в партнёрской программе.
+                    </div>
+                    <Input
+                      type="text"
+                      value={referrerInput}
+                      onChange={(e) => setReferrerInput(e.target.value)}
+                      placeholder="Адрес реферера (0x...)"
+                      className="mb-2"
+                      aria-label="Адрес реферера"
+                      tabIndex={0}
+                    />
+                    <Button
+                      variant="secondary"
+                      className="w-full"
+                      onClick={handleRegisterPartner}
+                      disabled={partnerLoading || !referrerInput}
+                      aria-label="Зарегистрироваться в партнёрской программе"
+                      tabIndex={0}
+                    >
+                      {partnerLoading ? "Регистрация..." : "Зарегистрироваться"}
+                    </Button>
+                  </div>
+                )}
+                {partnerStatus !== null && partnerStatus !== 0 && (
+                  <div className="mb-4">
+                    <div>
+                      <b>Статус:</b>{" "}
+                      {PartnerStatusLabels[partnerStatus] || partnerStatus}
+                    </div>
+                    <div>
+                      <b>Ваш реферер:</b> {partnerReferrer}
+                    </div>
+                    <div>
+                      <b>Лимит рефералов 1 уровня:</b> {maxFirstLevel}
+                    </div>
+                    <div>
+                      <b>Рефералы 1 уровня:</b>
+                      <ul className="list-disc ml-6">
+                        {firstLevelReferrals.length === 0 && <li>Нет</li>}
+                        {firstLevelReferrals.map((addr) => (
+                          <li key={addr} className="break-all">
+                            {addr}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+                <div className="mb-4">
+                  <label htmlFor="levelInput" className="block mb-1">
+                    Показать рефералов на уровне:
+                  </label>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      id="levelInput"
+                      type="number"
+                      min={1}
+                      max={8}
+                      value={levelInput}
+                      onChange={(e) => setLevelInput(Number(e.target.value))}
+                      className="w-20"
+                      aria-label="Уровень рефералов"
+                      tabIndex={0}
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={handleLoadLevel}
+                      disabled={levelLoading}
+                      aria-label="Показать рефералов на уровне"
+                      tabIndex={0}
+                    >
+                      {levelLoading ? "Загрузка..." : "Показать"}
+                    </Button>
+                  </div>
+                  {levelError && (
+                    <div className="text-red-500 mt-2">{levelError}</div>
+                  )}
+                  {levelReferrals.length > 0 && (
+                    <ul className="list-disc ml-6 mt-2">
+                      {levelReferrals.map((addr) => (
+                        <li key={addr} className="break-all">
+                          {addr}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {levelReferrals.length === 0 && !levelLoading && (
+                    <div className="text-muted-foreground mt-2">
+                      Нет рефералов на этом уровне
+                    </div>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={loadPartnerData}
+                  disabled={partnerLoading}
+                  aria-label="Обновить данные партнёра"
+                  tabIndex={0}
+                >
+                  Обновить
+                </Button>
+                {partnerError && (
+                  <div className="text-red-500 mt-2">{partnerError}</div>
+                )}
+              </>
+            )}
+          </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-2 w-full">
           <Button variant="outline" className="w-full" onClick={handleLogout}>

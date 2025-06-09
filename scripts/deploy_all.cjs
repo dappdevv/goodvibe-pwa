@@ -38,9 +38,9 @@ async function main() {
   console.log("DAOServices deployed to:", daoServices.target);
 
   // Обновляем адрес DAOServices в GoodVPN
-  const tx = await goodVPN.setDaoServices(daoServices.target);
-  await tx.wait();
-  console.log("GoodVPN: daoServices address updated to", daoServices.target);
+  // const tx = await goodVPN.setDaoServices(daoServices.target);
+  // await tx.wait();
+  // console.log("GoodVPN: daoServices address updated to", daoServices.target);
 
   // Сохраняем ABI и адреса для фронта
   const saveAbiAndAddress = (contractName, contractInstance) => {
