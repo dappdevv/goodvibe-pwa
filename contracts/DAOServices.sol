@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.27;
+
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title DAOServices - Контракт для управления сервисами и комиссиями DAO "GOOD VIBE"
-/// @author GOOD VIBE DAO
+/// @author GOOD VIBE DEVELOPMENT
 /// @notice Контракт хранит список сервисов, комиссий и принимает оплату комиссионных
 
-contract DAOServices {
+contract DAOServices is Ownable {
     /// @notice Структура сервиса
     struct Service {
         string name; // Название сервиса
@@ -36,35 +38,30 @@ contract DAOServices {
     mapping(uint256 => Commission) public commissions;
     uint256 public commissionsCount;
 
-    /// @notice Владелец
-    address public owner;
     /// @notice Адрес DAO Governance
     address public daoGovernance;
 
     /// @notice Модификатор: только владелец или DAO Governance
     modifier onlyOwnerOrGovernance() {
-        require(msg.sender == owner || msg.sender == daoGovernance, "Only owner or DAO Governance");
+        require(msg.sender == owner() || msg.sender == daoGovernance, "Only owner or DAO Governance");
         _;
     }
 
     /// @notice Конструктор
     /// @param _owner адрес владельца
-    /// @param _daoGovernance адрес DAO Governance
-    /// @param goodVPNAddress адрес контракта GoodVPN
-    constructor(address _owner, address _daoGovernance, address goodVPNAddress) {
+    constructor(address _owner) Ownable(_owner) {
         require(_owner != address(0), "Invalid owner address");
-        require(_daoGovernance != address(0), "Invalid DAO Governance address");
-        require(goodVPNAddress != address(0), "Invalid GoodVPN address");
-        owner = _owner;
-        daoGovernance = _daoGovernance;
-        // Добавляем сервис GoodVPN
-        services[servicesCount] = Service({name: "GoodVPN", serviceAddress: goodVPNAddress, exists: true});
-        emit ServiceAdded(servicesCount, "GoodVPN", goodVPNAddress);
-        servicesCount++;
         // Добавляем комиссию GoodVPNCommission (10%)
         commissions[commissionsCount] = Commission({name: "GoodVPNCommission", value: 10, exists: true});
         emit CommissionAdded(commissionsCount, "GoodVPNCommission", 10);
         commissionsCount++;
+    }
+
+    /// @notice Установить адрес DAO Governance (только владелец)
+    /// @param _daoGovernance Новый адрес DAO Governance
+    function setDAOGovernance(address _daoGovernance) external onlyOwner {
+        require(_daoGovernance != address(0), "Invalid DAO Governance address");
+        daoGovernance = _daoGovernance;
     }
 
     /// @notice Добавить сервис (только owner или DAO Governance)

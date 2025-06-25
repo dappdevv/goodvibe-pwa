@@ -1,10 +1,9 @@
 require("dotenv").config();
 require("@nomicfoundation/hardhat-toolbox");
 
-console.log("RPC", process.env.VITE_GOODVIBE_CHAIN_RPC_WITH_CREDENTIALS);
+// console.log("RPC", process.env.VITE_GOODVIBE_CHAIN_RPC_WITH_CREDENTIALS);
 
-const privateKeyFounder = process.env.TEST_FOUNDER_PKEY;
-// const privateKeyFounder = process.env.FOUNDER_PKEY;
+const privateKeyFounder = process.env.FOUNDER_PKEY;
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -20,6 +19,7 @@ module.exports = {
   defaultNetwork: "GoodVibeTestnet",
   networks: {
     hardhat: {},
+    // MAINNET
     GoodVibe: {
       chainId: 22052025,
       gasPrice: "auto",
@@ -27,11 +27,12 @@ module.exports = {
       url: process.env.VITE_GOODVIBE_CHAIN_RPC_WITH_CREDENTIALS,
       accounts: [privateKeyFounder],
     },
+    // TESTNET
     GoodVibeTestnet: {
       chainId: 22052024, // TESTNET ID
       gasPrice: "auto",
       gas: "auto",
-      url: process.env.VITE_GOODVIBE_CHAIN_RPC_TESTNET,
+      url: process.env.VITE_GOODVIBE_CHAIN_RPC_WITH_CREDENTIALS,
       accounts: [privateKeyFounder],
     },
   },

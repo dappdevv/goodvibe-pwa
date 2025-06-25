@@ -6,21 +6,11 @@ const path = require("path");
 async function main() {
   // Получаем параметры из переменных окружения или задаём по умолчанию
   const owner =
-    process.env.DAOSERVICES_OWNER || (await hre.ethers.getSigners())[0].address;
-  const daoGovernance =
-    process.env.DAOSERVICES_GOVERNANCE ||
-    (await hre.ethers.getSigners())[1].address;
-  const goodVPNAddress =
-    process.env.DAOSERVICES_GOODVPN ||
-    (await hre.ethers.getSigners())[2].address;
+    process.env.DEPLOY_OWNER || (await hre.ethers.getSigners())[0].address;
 
   // Деплой контракта
   const DAOServices = await hre.ethers.getContractFactory("DAOServices");
-  const daoServices = await DAOServices.deploy(
-    owner,
-    daoGovernance,
-    goodVPNAddress
-  );
+  const daoServices = await DAOServices.deploy(owner);
   await daoServices.waitForDeployment();
   console.log("DAOServices deployed to:", daoServices.target);
 

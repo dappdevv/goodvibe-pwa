@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { type Address } from "viem";
-import DAOServicesAbi from "../blockchain/abi/DAOServices.json";
-import DAOServicesAddress from "../blockchain/addresses/DAOServices.json";
 
 export default function GoodVPN() {
   // --- состояния для GoodVPN ---
@@ -45,33 +43,26 @@ export default function GoodVPN() {
   const [daoServicesLoading, setDaoServicesLoading] = useState(false);
   const [currentDaoServices, setCurrentDaoServices] = useState<string>("");
   // --- DAOServices UI state ---
-  const [daoServiceError, setDaoServiceError] = useState("");
-  const [daoServiceSuccess, setDaoServiceSuccess] = useState("");
-  const [addService, setAddService] = useState({
-    name: "",
-    serviceAddress: "",
-  });
-  const [addServiceLoading, setAddServiceLoading] = useState(false);
-  const [removeServiceId, setRemoveServiceId] = useState("");
-  const [removeServiceLoading, setRemoveServiceLoading] = useState(false);
-  const [addCommission, setAddCommission] = useState({ name: "", value: "" });
-  const [addCommissionLoading, setAddCommissionLoading] = useState(false);
-  const [removeCommissionId, setRemoveCommissionId] = useState("");
-  const [removeCommissionLoading, setRemoveCommissionLoading] = useState(false);
-  const [payCommission, setPayCommission] = useState({
-    commissionId: "",
-    amount: "",
-  });
-  const [payCommissionLoading, setPayCommissionLoading] = useState(false);
-  const [withdraw, setWithdraw] = useState({ to: "", amount: "" });
-  const [withdrawLoading, setWithdrawLoading] = useState(false);
-  const [daoBalance, setDaoBalance] = useState<string>("");
-  const [daoServicesList, setDaoServicesList] = useState<any[]>([]);
-  const [daoCommissionsList, setDaoCommissionsList] = useState<any[]>([]);
-  const [daoListLoading, setDaoListLoading] = useState(false);
-  const [commissionPercent, setCommissionPercent] = useState<number | null>(
-    null
-  );
+  // const [daoServiceError, setDaoServiceError] = useState("");
+  // const [daoServiceSuccess, setDaoServiceSuccess] = useState("");
+  // const [addService, setAddService] = useState({ ... });
+  // const [addServiceLoading, setAddServiceLoading] = useState(false);
+  // const [removeServiceId, setRemoveServiceId] = useState("");
+  // const [removeServiceLoading, setRemoveServiceLoading] = useState(false);
+  // const [addCommission, setAddCommission] = useState({ ... });
+  // const [addCommissionLoading, setAddCommissionLoading] = useState(false);
+  // const [removeCommissionId, setRemoveCommissionId] = useState("");
+  // const [removeCommissionLoading, setRemoveCommissionLoading] = useState(false);
+  // const [payCommission, setPayCommission] = useState({ ... });
+  // const [payCommissionLoading, setPayCommissionLoading] = useState(false);
+  // const [withdraw, setWithdraw] = useState({ ... });
+  // const [withdrawLoading, setWithdrawLoading] = useState(false);
+  // const [setCommissionIdLoading, setSetCommissionIdLoading] = useState(false);
+  // const [setCommissionIdError, setSetCommissionIdError] = useState("");
+  // const [setCommissionIdSuccess, setSetCommissionIdSuccess] = useState("");
+  const [userBalance, setUserBalance] = useState<string>("0");
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositLoading, setDepositLoading] = useState(false);
   // Получение адреса пользователя из localStorage
   useEffect(() => {
     const sessionId = localStorage.getItem("goodvibe_session_id");
@@ -176,107 +167,84 @@ export default function GoodVPN() {
       } catch {}
     })();
   }, []);
-  // Получить баланс DAOServices
+  // Получить баланс пользователя
   useEffect(() => {
+    if (!userAddress) return;
     (async () => {
       try {
         const bal = await publicClient.readContract({
-          address: DAOServicesAddress.address as Address,
-          abi: DAOServicesAbi,
-          functionName: "getBalance",
+          address: GoodVPNAddress.address as Address,
+          abi: GoodVPNAbi,
+          functionName: "balances",
+          args: [userAddress as Address],
         });
-        setDaoBalance((Number(bal) / 1e18).toFixed(4) + " ETH");
-      } catch {}
+        setUserBalance((Number(bal) / 1e18).toFixed(4));
+      } catch {
+        setUserBalance("0");
+      }
     })();
-  }, []);
-  // Загрузка списка сервисов и комиссий
-  const loadDaoLists = async () => {
-    setDaoListLoading(true);
-    try {
-      // Сервисы
-      const servicesCount = await publicClient.readContract({
-        address: DAOServicesAddress.address as Address,
-        abi: DAOServicesAbi,
-        functionName: "servicesCount",
-      });
-      const servicesArr = [];
-      for (let i = 0; i < Number(servicesCount); i++) {
-        const s = (await publicClient.readContract({
-          address: DAOServicesAddress.address as Address,
-          abi: DAOServicesAbi,
-          functionName: "services",
-          args: [i],
-        })) as [string, string, boolean];
-        if (s[2]) servicesArr.push({ id: i, name: s[0], address: s[1] });
-      }
-      setDaoServicesList(servicesArr);
-      // Комиссии
-      const commissionsCount = await publicClient.readContract({
-        address: DAOServicesAddress.address as Address,
-        abi: DAOServicesAbi,
-        functionName: "commissionsCount",
-      });
-      const commissionsArr = [];
-      for (let i = 0; i < Number(commissionsCount); i++) {
-        const c = (await publicClient.readContract({
-          address: DAOServicesAddress.address as Address,
-          abi: DAOServicesAbi,
-          functionName: "commissions",
-          args: [i],
-        })) as [string, number, boolean];
-        if (c[2]) commissionsArr.push({ id: i, name: c[0], value: c[1] });
-      }
-      setDaoCommissionsList(commissionsArr);
-    } catch {}
-    setDaoListLoading(false);
-  };
-  // Загружать при открытии админки
-  useEffect(() => {
-    loadDaoLists();
-  }, []);
-  // Получить комиссию для каждого сервера
+  }, [userAddress, loading]);
+  // Получить commissionGoodVPN из контракта
   useEffect(() => {
     (async () => {
       try {
-        // Получить commissionId из GoodVPN
-        const commissionId = await publicClient.readContract({
+        const comm = await publicClient.readContract({
           address: GoodVPNAddress.address as Address,
           abi: GoodVPNAbi,
-          functionName: "goodVPNCommissionId",
+          functionName: "commissionGoodVPN",
         });
-        // Получить комиссию из DAOServices
-        const [, percent, exists] = (await publicClient.readContract({
-          address: DAOServicesAddress.address as Address,
-          abi: DAOServicesAbi,
-          functionName: "commissions",
-          args: [commissionId],
-        })) as [string, number, boolean];
-        if (exists) {
-          setCommissionPercent(Number(percent));
-        }
+        setCommissionGoodVPN(Number(comm));
       } catch {}
     })();
-  }, [servers.length]);
-  // Покупка VPN с учётом комиссии
-  const handleBuyVPN = async (serverId: number, price: number) => {
+  }, [userAddress, loading]);
+  // Функция пополнения баланса
+  const handleDeposit = async () => {
+    setDepositLoading(true);
+    setError("");
+    try {
+      const sessionId = localStorage.getItem("goodvibe_session_id");
+      const encrypted = sessionId
+        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
+        : null;
+      const pin = localStorage.getItem("goodvibe_pin");
+      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
+      const decrypted = await decryptData(encrypted, pin);
+      const userData = JSON.parse(decrypted);
+      const walletClient = createWalletClientFromPrivateKey(
+        userData.privateKey
+      );
+      await walletClient.sendTransaction({
+        to: GoodVPNAddress.address as Address,
+        value: BigInt(Number(depositAmount) * 1e18),
+        chain: walletClient.chain,
+        account: walletClient.account ?? null,
+      });
+      toast("Баланс успешно пополнен!");
+      setDepositAmount("");
+      // Обновить баланс после пополнения
+      setTimeout(() => {
+        (async () => {
+          try {
+            const bal = await publicClient.readContract({
+              address: GoodVPNAddress.address as Address,
+              abi: GoodVPNAbi,
+              functionName: "balances",
+              args: [userAddress as Address],
+            });
+            setUserBalance((Number(bal) / 1e18).toFixed(4));
+          } catch {}
+        })();
+      }, 2000);
+    } catch (e: any) {
+      setError(e?.shortMessage || e?.message || "Ошибка пополнения баланса");
+    }
+    setDepositLoading(false);
+  };
+  // Покупка VPN с учётом комиссии GoodVPN
+  const handleBuyVPN = async (serverId: number) => {
     setLoading(true);
     setError("");
     try {
-      // Получить commissionId и процент
-      const commissionId = await publicClient.readContract({
-        address: GoodVPNAddress.address as Address,
-        abi: GoodVPNAbi,
-        functionName: "goodVPNCommissionId",
-      });
-      const [, percent, exists] = (await publicClient.readContract({
-        address: DAOServicesAddress.address as Address,
-        abi: DAOServicesAbi,
-        functionName: "commissions",
-        args: [commissionId],
-      })) as [string, number, boolean];
-      if (!exists) throw new Error("Комиссия не найдена");
-      const commission = (price * Number(percent)) / 100;
-      const total = price + commission;
       const sessionId = localStorage.getItem("goodvibe_session_id");
       const encrypted = sessionId
         ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
@@ -293,7 +261,6 @@ export default function GoodVPN() {
         abi: GoodVPNAbi,
         functionName: "payVPN",
         args: [serverId],
-        value: BigInt(Math.floor(total)),
         chain: walletClient.chain,
         account: walletClient.account ?? null,
       });
@@ -302,7 +269,22 @@ export default function GoodVPN() {
         ...prev,
         [serverId]: Math.floor(Date.now() / 1000) + 30 * 24 * 3600,
       }));
+      // Обновить баланс после покупки
+      setTimeout(() => {
+        (async () => {
+          try {
+            const bal = await publicClient.readContract({
+              address: GoodVPNAddress.address as Address,
+              abi: GoodVPNAbi,
+              functionName: "balances",
+              args: [userAddress as Address],
+            });
+            setUserBalance((Number(bal) / 1e18).toFixed(4));
+          } catch {}
+        })();
+      }, 2000);
     } catch (e: any) {
+      console.error(e);
       setError(e?.shortMessage || e?.message || "Ошибка покупки VPN");
     }
     setLoading(false);
@@ -439,11 +421,17 @@ export default function GoodVPN() {
     }
     setDaoServicesLoading(false);
   };
-  // addService
-  const handleAddService = async () => {
-    setDaoServiceError("");
-    setDaoServiceSuccess("");
-    setAddServiceLoading(true);
+  // Добавляю:
+  const [commissionGoodVPN, setCommissionGoodVPN] = useState<number>(10);
+  const [commissionInput, setCommissionInput] = useState("");
+  const [commissionLoading, setCommissionLoading] = useState(false);
+  const [commissionError, setCommissionError] = useState("");
+  const [commissionSuccess, setCommissionSuccess] = useState("");
+  // Обработчик установки комиссии
+  const handleSetCommissionGoodVPN = async () => {
+    setCommissionLoading(true);
+    setCommissionError("");
+    setCommissionSuccess("");
     try {
       const sessionId = localStorage.getItem("goodvibe_session_id");
       const encrypted = sessionId
@@ -457,192 +445,34 @@ export default function GoodVPN() {
         userData.privateKey
       );
       await walletClient.writeContract({
-        address: DAOServicesAddress.address as Address,
-        abi: DAOServicesAbi,
-        functionName: "addService",
-        args: [addService.name, addService.serviceAddress],
+        address: GoodVPNAddress.address as Address,
+        abi: GoodVPNAbi,
+        functionName: "setCommissionGoodVPN",
+        args: [Number(commissionInput)],
         chain: walletClient.chain,
         account: walletClient.account ?? null,
       });
-      setDaoServiceSuccess("Сервис добавлен!");
-      setAddService({ name: "", serviceAddress: "" });
+      setCommissionSuccess("Комиссия успешно обновлена!");
+      setCommissionInput("");
+      // Обновить commissionGoodVPN
+      setTimeout(() => {
+        (async () => {
+          try {
+            const comm = await publicClient.readContract({
+              address: GoodVPNAddress.address as Address,
+              abi: GoodVPNAbi,
+              functionName: "commissionGoodVPN",
+            });
+            setCommissionGoodVPN(Number(comm));
+          } catch {}
+        })();
+      }, 2000);
     } catch (e: any) {
-      setDaoServiceError(
-        e?.shortMessage || e?.message || "Ошибка добавления сервиса"
+      setCommissionError(
+        e?.shortMessage || e?.message || "Ошибка обновления комиссии"
       );
     }
-    setAddServiceLoading(false);
-  };
-  // removeService
-  const handleRemoveService = async () => {
-    setDaoServiceError("");
-    setDaoServiceSuccess("");
-    setRemoveServiceLoading(true);
-    try {
-      const sessionId = localStorage.getItem("goodvibe_session_id");
-      const encrypted = sessionId
-        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
-        : null;
-      const pin = localStorage.getItem("goodvibe_pin");
-      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
-      const decrypted = await decryptData(encrypted, pin);
-      const userData = JSON.parse(decrypted);
-      const walletClient = createWalletClientFromPrivateKey(
-        userData.privateKey
-      );
-      await walletClient.writeContract({
-        address: DAOServicesAddress.address as Address,
-        abi: DAOServicesAbi,
-        functionName: "removeService",
-        args: [Number(removeServiceId)],
-        chain: walletClient.chain,
-        account: walletClient.account ?? null,
-      });
-      setDaoServiceSuccess("Сервис удалён!");
-      setRemoveServiceId("");
-    } catch (e: any) {
-      setDaoServiceError(
-        e?.shortMessage || e?.message || "Ошибка удаления сервиса"
-      );
-    }
-    setRemoveServiceLoading(false);
-  };
-  // addCommission
-  const handleAddCommission = async () => {
-    setDaoServiceError("");
-    setDaoServiceSuccess("");
-    setAddCommissionLoading(true);
-    try {
-      const sessionId = localStorage.getItem("goodvibe_session_id");
-      const encrypted = sessionId
-        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
-        : null;
-      const pin = localStorage.getItem("goodvibe_pin");
-      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
-      const decrypted = await decryptData(encrypted, pin);
-      const userData = JSON.parse(decrypted);
-      const walletClient = createWalletClientFromPrivateKey(
-        userData.privateKey
-      );
-      await walletClient.writeContract({
-        address: DAOServicesAddress.address as Address,
-        abi: DAOServicesAbi,
-        functionName: "addCommission",
-        args: [addCommission.name, Number(addCommission.value)],
-        chain: walletClient.chain,
-        account: walletClient.account ?? null,
-      });
-      setDaoServiceSuccess("Комиссия добавлена!");
-      setAddCommission({ name: "", value: "" });
-    } catch (e: any) {
-      setDaoServiceError(
-        e?.shortMessage || e?.message || "Ошибка добавления комиссии"
-      );
-    }
-    setAddCommissionLoading(false);
-  };
-  // removeCommission
-  const handleRemoveCommission = async () => {
-    setDaoServiceError("");
-    setDaoServiceSuccess("");
-    setRemoveCommissionLoading(true);
-    try {
-      const sessionId = localStorage.getItem("goodvibe_session_id");
-      const encrypted = sessionId
-        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
-        : null;
-      const pin = localStorage.getItem("goodvibe_pin");
-      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
-      const decrypted = await decryptData(encrypted, pin);
-      const userData = JSON.parse(decrypted);
-      const walletClient = createWalletClientFromPrivateKey(
-        userData.privateKey
-      );
-      await walletClient.writeContract({
-        address: DAOServicesAddress.address as Address,
-        abi: DAOServicesAbi,
-        functionName: "removeCommission",
-        args: [Number(removeCommissionId)],
-        chain: walletClient.chain,
-        account: walletClient.account ?? null,
-      });
-      setDaoServiceSuccess("Комиссия удалена!");
-      setRemoveCommissionId("");
-    } catch (e: any) {
-      setDaoServiceError(
-        e?.shortMessage || e?.message || "Ошибка удаления комиссии"
-      );
-    }
-    setRemoveCommissionLoading(false);
-  };
-  // payCommission
-  const handlePayCommission = async () => {
-    setDaoServiceError("");
-    setDaoServiceSuccess("");
-    setPayCommissionLoading(true);
-    try {
-      const sessionId = localStorage.getItem("goodvibe_session_id");
-      const encrypted = sessionId
-        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
-        : null;
-      const pin = localStorage.getItem("goodvibe_pin");
-      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
-      const decrypted = await decryptData(encrypted, pin);
-      const userData = JSON.parse(decrypted);
-      const walletClient = createWalletClientFromPrivateKey(
-        userData.privateKey
-      );
-      await walletClient.writeContract({
-        address: DAOServicesAddress.address as Address,
-        abi: DAOServicesAbi,
-        functionName: "payCommission",
-        args: [Number(payCommission.commissionId)],
-        value: BigInt(Number(payCommission.amount) * 1e18),
-        chain: walletClient.chain,
-        account: walletClient.account ?? null,
-      });
-      setDaoServiceSuccess("Комиссия оплачена!");
-      setPayCommission({ commissionId: "", amount: "" });
-    } catch (e: any) {
-      setDaoServiceError(
-        e?.shortMessage || e?.message || "Ошибка оплаты комиссии"
-      );
-    }
-    setPayCommissionLoading(false);
-  };
-  // withdraw
-  const handleWithdraw = async () => {
-    setDaoServiceError("");
-    setDaoServiceSuccess("");
-    setWithdrawLoading(true);
-    try {
-      const sessionId = localStorage.getItem("goodvibe_session_id");
-      const encrypted = sessionId
-        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
-        : null;
-      const pin = localStorage.getItem("goodvibe_pin");
-      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
-      const decrypted = await decryptData(encrypted, pin);
-      const userData = JSON.parse(decrypted);
-      const walletClient = createWalletClientFromPrivateKey(
-        userData.privateKey
-      );
-      await walletClient.writeContract({
-        address: DAOServicesAddress.address as Address,
-        abi: DAOServicesAbi,
-        functionName: "withdraw",
-        args: [withdraw.to, BigInt(Number(withdraw.amount) * 1e18)],
-        chain: walletClient.chain,
-        account: walletClient.account ?? null,
-      });
-      setDaoServiceSuccess("Вывод средств выполнен!");
-      setWithdraw({ to: "", amount: "" });
-    } catch (e: any) {
-      setDaoServiceError(
-        e?.shortMessage || e?.message || "Ошибка вывода средств"
-      );
-    }
-    setWithdrawLoading(false);
+    setCommissionLoading(false);
   };
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-2">
@@ -662,76 +492,102 @@ export default function GoodVPN() {
             </div>
           ) : (
             <>
-              {servers.length === 0 && (
-                <div className="text-muted-foreground">
-                  Нет доступных серверов
+              {/* --- Баланс пользователя и пополнение --- */}
+              <div className="mb-6 p-4 bg-muted rounded-lg border flex flex-col gap-2">
+                <div className="font-semibold">
+                  Ваш баланс: {userBalance} ETH
                 </div>
-              )}
-              {servers.length > 0 && (
-                <div className="space-y-4">
-                  {servers.map((srv) => (
-                    <div
-                      key={srv.id}
-                      className="border rounded-lg p-3 bg-white dark:bg-zinc-900"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <div>
-                          <div className="font-semibold">{srv.location}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {srv.description}
-                          </div>
-                          <div className="text-xs mt-1">
-                            Устройств: {srv.deviceAmount}
-                          </div>
-                          <div className="text-xs">
-                            Длительность: {Math.floor(srv.expiration / 86400)}{" "}
-                            дней
-                          </div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  Текущая комиссия сервиса: {commissionGoodVPN}%
+                </div>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    className="input input-bordered"
+                    placeholder="Сумма (ETH)"
+                    value={depositAmount}
+                    onChange={(e) => setDepositAmount(e.target.value)}
+                    aria-label="Сумма для пополнения"
+                    tabIndex={0}
+                    min={0}
+                    step={0.0001}
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={handleDeposit}
+                    disabled={
+                      depositLoading ||
+                      !depositAmount ||
+                      Number(depositAmount) <= 0
+                    }
+                    aria-label="Пополнить баланс"
+                    tabIndex={0}
+                  >
+                    {depositLoading ? "Пополнение..." : "Пополнить баланс"}
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-4">
+                {servers.map((srv) => (
+                  <div
+                    key={srv.id}
+                    className="border rounded-lg p-3 bg-white dark:bg-zinc-900"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <div className="font-semibold">{srv.location}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {srv.description}
                         </div>
-                        <div className="flex flex-col items-end gap-2">
-                          <div className="font-bold text-primary">
-                            {Number(srv.price) / 1e18} ETH
-                          </div>
-                          {userSubscriptions[srv.id] &&
-                          userSubscriptions[srv.id] >
-                            Math.floor(Date.now() / 1000) ? (
-                            <div className="text-green-600 text-xs">
-                              Подписка активна до{" "}
-                              {new Date(
-                                userSubscriptions[srv.id] * 1000
-                              ).toLocaleString()}
-                            </div>
-                          ) : (
-                            <Button
-                              variant="secondary"
-                              onClick={() =>
-                                handleBuyVPN(srv.id, Number(srv.price))
-                              }
-                              disabled={loading}
-                              aria-label="Купить VPN"
-                              tabIndex={0}
-                            >
-                              Купить VPN
-                              {commissionPercent !== null && (
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                  (
-                                  {(
-                                    Number(srv.price) / 1e18 +
-                                    ((Number(srv.price) / 1e18) *
-                                      commissionPercent) /
-                                      100
-                                  ).toFixed(4)}{" "}
-                                  ETH с комиссией)
-                                </span>
-                              )}
-                            </Button>
-                          )}
+                        <div className="text-xs mt-1">
+                          Устройств: {srv.deviceAmount}
+                        </div>
+                        <div className="text-xs">
+                          Длительность: {Math.floor(srv.expiration / 86400)}{" "}
+                          дней
                         </div>
                       </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="font-bold text-primary">
+                          {Number(srv.price) / 1e18} ETH
+                        </div>
+                        {userSubscriptions[srv.id] &&
+                        userSubscriptions[srv.id] >
+                          Math.floor(Date.now() / 1000) ? (
+                          <div className="text-green-600 text-xs">
+                            Подписка активна до{" "}
+                            {new Date(
+                              userSubscriptions[srv.id] * 1000
+                            ).toLocaleString()}
+                          </div>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            onClick={() => handleBuyVPN(srv.id)}
+                            disabled={loading}
+                            aria-label="Купить VPN"
+                            tabIndex={0}
+                          >
+                            Купить VPN
+                            {commissionGoodVPN !== null && (
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                (
+                                {(
+                                  Number(srv.price) / 1e18 +
+                                  ((Number(srv.price) / 1e18) *
+                                    commissionGoodVPN) /
+                                    100
+                                ).toFixed(4)}{" "}
+                                ETH с комиссией)
+                              </span>
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
             </>
           )}
           {/* --- UI для владельца GoodVPN --- */}
@@ -967,345 +823,41 @@ export default function GoodVPN() {
                 </div>
               </div>
             )}
-          {/* --- DAOServices UI --- */}
+          {/* --- UI для владельца: установка комиссии GoodVPN --- */}
           {userAddress &&
             owner &&
             userAddress.toLowerCase() === owner.toLowerCase() && (
               <div className="w-full max-w-lg mx-auto mt-10 mb-10 p-4 bg-muted rounded-lg border">
                 <h2 className="text-xl font-bold mb-4">
-                  Управление DAOServices
+                  Установить комиссию GoodVPN
                 </h2>
-                <div className="mb-2 text-xs text-muted-foreground">
-                  Баланс контракта: {daoBalance}
-                </div>
-                <Button
-                  variant="outline"
-                  className="mb-4"
-                  onClick={loadDaoLists}
-                  disabled={daoListLoading}
-                  aria-label="Обновить списки"
-                  tabIndex={0}
-                >
-                  {daoListLoading ? "Обновление..." : "Обновить списки"}
-                </Button>
-                {daoServiceError && (
-                  <div className="text-red-500 mb-2">{daoServiceError}</div>
+                {commissionError && (
+                  <div className="text-red-500 mb-2">{commissionError}</div>
                 )}
-                {daoServiceSuccess && (
-                  <div className="text-green-600 mb-2">{daoServiceSuccess}</div>
+                {commissionSuccess && (
+                  <div className="text-green-600 mb-2">{commissionSuccess}</div>
                 )}
-                {/* Список сервисов */}
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-2">Сервисы</h3>
-                  {daoListLoading ? (
-                    <div className="text-muted-foreground">Загрузка...</div>
-                  ) : (
-                    <ul className="text-xs space-y-1">
-                      {daoServicesList.length === 0 && <li>Нет сервисов</li>}
-                      {daoServicesList.map((s) => (
-                        <li key={s.id} className="break-all">
-                          ID: {s.id} | {s.name} | {s.address}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                {/* Список комиссий */}
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-2">Комиссии</h3>
-                  {daoListLoading ? (
-                    <div className="text-muted-foreground">Загрузка...</div>
-                  ) : (
-                    <ul className="text-xs space-y-1">
-                      {daoCommissionsList.length === 0 && <li>Нет комиссий</li>}
-                      {daoCommissionsList.map((c) => (
-                        <li key={c.id}>
-                          ID: {c.id} | {c.name} | {c.value}%
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                {/* addService */}
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-2">Добавить сервис</h3>
-                  <div className="flex flex-col gap-2">
-                    <label
-                      className="text-xs font-medium"
-                      htmlFor="add-service-name"
-                    >
-                      Название
-                    </label>
-                    <input
-                      id="add-service-name"
-                      type="text"
-                      className="input input-bordered"
-                      placeholder="Название"
-                      value={addService.name}
-                      onChange={(e) =>
-                        setAddService((s) => ({ ...s, name: e.target.value }))
-                      }
-                      aria-label="Название"
-                      tabIndex={0}
-                    />
-                    <label
-                      className="text-xs font-medium"
-                      htmlFor="add-service-address"
-                    >
-                      Адрес сервиса
-                    </label>
-                    <input
-                      id="add-service-address"
-                      type="text"
-                      className="input input-bordered"
-                      placeholder="Адрес сервиса"
-                      value={addService.serviceAddress}
-                      onChange={(e) =>
-                        setAddService((s) => ({
-                          ...s,
-                          serviceAddress: e.target.value,
-                        }))
-                      }
-                      aria-label="Адрес сервиса"
-                      tabIndex={0}
-                    />
-                    <Button
-                      variant="secondary"
-                      className="w-full"
-                      onClick={handleAddService}
-                      disabled={addServiceLoading}
-                      aria-label="Добавить сервис"
-                      tabIndex={0}
-                    >
-                      {addServiceLoading ? "Добавление..." : "Добавить сервис"}
-                    </Button>
-                  </div>
-                </div>
-                {/* removeService */}
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-2">Удалить сервис</h3>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      className="input input-bordered"
-                      placeholder="ID сервиса"
-                      value={removeServiceId}
-                      onChange={(e) => setRemoveServiceId(e.target.value)}
-                      aria-label="ID сервиса"
-                      tabIndex={0}
-                      min={0}
-                    />
-                    <Button
-                      variant="destructive"
-                      onClick={handleRemoveService}
-                      disabled={removeServiceLoading}
-                      aria-label="Удалить сервис"
-                      tabIndex={0}
-                    >
-                      {removeServiceLoading ? "Удаление..." : "Удалить"}
-                    </Button>
-                  </div>
-                </div>
-                {/* addCommission */}
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-2">Добавить комиссию</h3>
-                  <div className="flex flex-col gap-2">
-                    <label
-                      className="text-xs font-medium"
-                      htmlFor="add-commission-name"
-                    >
-                      Название
-                    </label>
-                    <input
-                      id="add-commission-name"
-                      type="text"
-                      className="input input-bordered"
-                      placeholder="Название"
-                      value={addCommission.name}
-                      onChange={(e) =>
-                        setAddCommission((s) => ({
-                          ...s,
-                          name: e.target.value,
-                        }))
-                      }
-                      aria-label="Название"
-                      tabIndex={0}
-                    />
-                    <label
-                      className="text-xs font-medium"
-                      htmlFor="add-commission-value"
-                    >
-                      Значение (%)
-                    </label>
-                    <input
-                      id="add-commission-value"
-                      type="number"
-                      className="input input-bordered"
-                      placeholder="Значение (%)"
-                      value={addCommission.value}
-                      onChange={(e) =>
-                        setAddCommission((s) => ({
-                          ...s,
-                          value: e.target.value,
-                        }))
-                      }
-                      aria-label="Значение"
-                      tabIndex={0}
-                      min={1}
-                    />
-                    <Button
-                      variant="secondary"
-                      className="w-full"
-                      onClick={handleAddCommission}
-                      disabled={addCommissionLoading}
-                      aria-label="Добавить комиссию"
-                      tabIndex={0}
-                    >
-                      {addCommissionLoading
-                        ? "Добавление..."
-                        : "Добавить комиссию"}
-                    </Button>
-                  </div>
-                </div>
-                {/* removeCommission */}
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-2">Удалить комиссию</h3>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      className="input input-bordered"
-                      placeholder="ID комиссии"
-                      value={removeCommissionId}
-                      onChange={(e) => setRemoveCommissionId(e.target.value)}
-                      aria-label="ID комиссии"
-                      tabIndex={0}
-                      min={0}
-                    />
-                    <Button
-                      variant="destructive"
-                      onClick={handleRemoveCommission}
-                      disabled={removeCommissionLoading}
-                      aria-label="Удалить комиссию"
-                      tabIndex={0}
-                    >
-                      {removeCommissionLoading ? "Удаление..." : "Удалить"}
-                    </Button>
-                  </div>
-                </div>
-                {/* payCommission */}
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-2">Оплатить комиссию</h3>
-                  <div className="flex flex-col gap-2">
-                    <label
-                      className="text-xs font-medium"
-                      htmlFor="pay-commission-id"
-                    >
-                      ID комиссии
-                    </label>
-                    <input
-                      id="pay-commission-id"
-                      type="number"
-                      className="input input-bordered"
-                      placeholder="ID комиссии"
-                      value={payCommission.commissionId}
-                      onChange={(e) =>
-                        setPayCommission((s) => ({
-                          ...s,
-                          commissionId: e.target.value,
-                        }))
-                      }
-                      aria-label="ID комиссии"
-                      tabIndex={0}
-                      min={0}
-                    />
-                    <label
-                      className="text-xs font-medium"
-                      htmlFor="pay-commission-amount"
-                    >
-                      Сумма (ETH)
-                    </label>
-                    <input
-                      id="pay-commission-amount"
-                      type="number"
-                      className="input input-bordered"
-                      placeholder="Сумма (ETH)"
-                      value={payCommission.amount}
-                      onChange={(e) =>
-                        setPayCommission((s) => ({
-                          ...s,
-                          amount: e.target.value,
-                        }))
-                      }
-                      aria-label="Сумма"
-                      tabIndex={0}
-                      min={0}
-                      step={0.0001}
-                    />
-                    <Button
-                      variant="secondary"
-                      className="w-full"
-                      onClick={handlePayCommission}
-                      disabled={payCommissionLoading}
-                      aria-label="Оплатить комиссию"
-                      tabIndex={0}
-                    >
-                      {payCommissionLoading ? "Оплата..." : "Оплатить комиссию"}
-                    </Button>
-                  </div>
-                </div>
-                {/* withdraw */}
-                <div className="mb-6">
-                  <h3 className="font-semibold mb-2">Вывести средства</h3>
-                  <div className="flex flex-col gap-2">
-                    <label
-                      className="text-xs font-medium"
-                      htmlFor="withdraw-to"
-                    >
-                      Адрес получателя
-                    </label>
-                    <input
-                      id="withdraw-to"
-                      type="text"
-                      className="input input-bordered"
-                      placeholder="Адрес получателя"
-                      value={withdraw.to}
-                      onChange={(e) =>
-                        setWithdraw((s) => ({ ...s, to: e.target.value }))
-                      }
-                      aria-label="Адрес получателя"
-                      tabIndex={0}
-                    />
-                    <label
-                      className="text-xs font-medium"
-                      htmlFor="withdraw-amount"
-                    >
-                      Сумма (ETH)
-                    </label>
-                    <input
-                      id="withdraw-amount"
-                      type="number"
-                      className="input input-bordered"
-                      placeholder="Сумма (ETH)"
-                      value={withdraw.amount}
-                      onChange={(e) =>
-                        setWithdraw((s) => ({ ...s, amount: e.target.value }))
-                      }
-                      aria-label="Сумма"
-                      tabIndex={0}
-                      min={0}
-                      step={0.0001}
-                    />
-                    <Button
-                      variant="secondary"
-                      className="w-full"
-                      onClick={handleWithdraw}
-                      disabled={withdrawLoading}
-                      aria-label="Вывести средства"
-                      tabIndex={0}
-                    >
-                      {withdrawLoading ? "Вывод..." : "Вывести средства"}
-                    </Button>
-                  </div>
+                <div className="flex gap-2 items-center mb-2">
+                  <input
+                    type="number"
+                    className="input input-bordered"
+                    placeholder="Процент комиссии"
+                    value={commissionInput}
+                    onChange={(e) => setCommissionInput(e.target.value)}
+                    aria-label="Процент комиссии"
+                    tabIndex={0}
+                    min={0}
+                    max={100}
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={handleSetCommissionGoodVPN}
+                    disabled={commissionLoading || commissionInput === ""}
+                    aria-label="Установить комиссию"
+                    tabIndex={0}
+                  >
+                    {commissionLoading ? "Установка..." : "Установить"}
+                  </Button>
                 </div>
               </div>
             )}

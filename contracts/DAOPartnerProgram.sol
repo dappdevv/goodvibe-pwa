@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.27;
+
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title DAOPartnerProgram - Партнёрская программа для DAO "GOOD VIBE"
-/// @author GOOD VIBE DAO
+/// @author GOOD VIBE DEVELOPMENT
 /// @notice Контракт реализует 8-уровневую реферальную систему с бизнес-логикой комиссионных и статусами партнёров
 
-contract DAOPartnerProgram {
+contract DAOPartnerProgram is Ownable {
     /// @notice Статусы партнёра
     enum PartnerStatus { None, Active, Inactive, Blocked, Paused }
 
@@ -43,15 +45,19 @@ contract DAOPartnerProgram {
 
     /// @notice Конструктор
     /// @param _founder адрес основателя
-    /// @param _daoGovernance адрес DAO Governance
-    constructor(address _founder, address _daoGovernance) {
+    constructor(address _founder) Ownable(_founder) {
         require(_founder != address(0), "Invalid founder address");
-        require(_daoGovernance != address(0), "Invalid DAO Governance address");
         founder = _founder;
-        daoGovernance = _daoGovernance;
         // Регистрируем основателя как первого партнёра
         partners[_founder].status = PartnerStatus.Active;
         partners[_founder].referrer = _founder;
+    }
+
+    /// @notice Установить адрес контракта DAO Governance (только владелец)
+    /// @param _daoGovernance Новый адрес DAO Governance
+    function setDAOGovernance(address _daoGovernance) external onlyOwner {
+        require(_daoGovernance != address(0), "Invalid DAO Governance address");
+        daoGovernance = _daoGovernance;
     }
 
     /// @notice Регистрация нового партнёра

@@ -6,20 +6,15 @@ const path = require("path");
 async function main() {
   // Получаем параметры из переменных окружения или задаём по умолчанию
   const founder =
-    process.env.DAOPARTNER_FOUNDER ||
-    (await hre.ethers.getSigners())[0].address;
+    process.env.DEPLOY_OWNER || (await hre.ethers.getSigners())[0].address;
   const daoGovernance =
-    process.env.DAOPARTNER_GOVERNANCE ||
-    (await hre.ethers.getSigners())[1].address;
+    process.env.DEPLOY_GOVERNANCE || (await hre.ethers.getSigners())[1].address;
 
   // Деплой контракта
   const DAOPartnerProgram = await hre.ethers.getContractFactory(
     "DAOPartnerProgram"
   );
-  const daoPartnerProgram = await DAOPartnerProgram.deploy(
-    founder,
-    daoGovernance
-  );
+  const daoPartnerProgram = await DAOPartnerProgram.deploy(founder);
   await daoPartnerProgram.waitForDeployment();
   console.log("DAOPartnerProgram deployed to:", daoPartnerProgram.target);
 

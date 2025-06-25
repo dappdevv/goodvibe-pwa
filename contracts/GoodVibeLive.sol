@@ -4,18 +4,18 @@ pragma solidity ^0.8.27;
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-/// @title DAOUsers - Управление пользователями и верификациями для DAO GOOD VIBE
-/// @author GOOD VIBE DEVELOPMENT
+/// @title GoodVibeLive - DAO GOOD VIBE LIVE
+/// @author GOOD VIBE LIVE DEVELOPMENT
 /// @notice Контракт для регистрации пользователей, приглашений и верификаций в DAO
 /// @custom:evm-version paris
-/// @custom:security-contact goodvibe.live/securityalert
+/// @custom:security-contact goodvibe.live/securityalert telegram: @goodvibedevbot
 
-contract DAOUsers is ReentrancyGuard, Ownable {
+contract GoodVibeLive is ReentrancyGuard, Ownable {
     // ============ Constants ============
     /// @notice Максимальная длина имени пользователя
     uint256 public constant MAX_NAME_LENGTH = 99;
     /// @notice Максимальное количество активных приглашений для одного пользователя
-    uint256 public constant MAX_ACTIVE_INVITES = 7;
+    uint256 public constant MAX_ACTIVE_INVITES = 6;
     /// @notice Время действия приглашения
     uint constant INVITE_VALIDITY = 1 days;
     /// @notice Время действия верификации
@@ -26,8 +26,6 @@ contract DAOUsers is ReentrancyGuard, Ownable {
     address public immutable founder;
     /// @notice Адрес контракта управления DAO
     address public DAOGovernanceAddress;
-    /// @notice Счетчик приглашений
-    uint private inviteCounter;
     /// @notice Общее количество пользователей
     uint public usersCount;
 
@@ -49,6 +47,12 @@ contract DAOUsers is ReentrancyGuard, Ownable {
 
     /// @notice Маппинг количества активных приглашений для каждого пользователя
     mapping(address => uint256) private activeInvitesCount;
+
+    /// @notice Маппинг балансов пользователей
+    mapping(address => uint256) public balances;
+
+    /// @notice Маппинг названий сервисов на адреса сервисов
+    mapping(string => Service) public services;
 
     // ============ Enums ============
     /// @notice Статусы пользователя в системе
@@ -84,11 +88,11 @@ contract DAOUsers is ReentrancyGuard, Ownable {
         uint registered;          // Время регистрации (timestamp)
         uint rating;              // Рейтинг пользователя
         uint verificationsCount;  // Количество успешных верификаций
+        address[] firstLevelReferrals; // массив рефералов первого уровня
     }
 
     /// @notice Структура приглашения
     struct Invite {
-        uint id;                  // ID приглашения
         address inviter;          // Пригласивший
         address invitee;          // Приглашаемый
         uint expiration;          // Время истечения приглашения
@@ -109,15 +113,24 @@ contract DAOUsers is ReentrancyGuard, Ownable {
         bytes32 verificationHash;         // Хэш верификации
     }
 
+    /// @notice Структура сервиса
+    struct Service {
+        string name; // Название сервиса
+        address serviceAddress; // Адрес контракта сервиса
+        bool exists; // Флаг существования
+    }
+
     // ============ Events ============
     /// @notice Событие создания приглашения
-    event InviteCreated(uint indexed id, address indexed inviter, address indexed invitee, uint expiration);
+    event InviteCreated(address indexed inviter, address indexed invitee, uint expiration);
     /// @notice Событие регистрации пользователя
     event UserRegistered(address indexed userAddress, string name, address indexed referrer);
     /// @notice Событие начала верификации
     event VerificationStarted(uint indexed id, address indexed verificator, address indexed verifiable, string ipfsCID);
     /// @notice Событие изменения статуса верификации
     event VerificationStatusChanged(address indexed requester, VerificationStatus status, string comment);
+    /// @notice Событие пополнения баланса
+    event Deposit(address indexed user, uint256 amount);
 
     // ============ Modifiers ============
     /// @notice Модификатор для проверки управления DAO
@@ -128,6 +141,12 @@ contract DAOUsers is ReentrancyGuard, Ownable {
     /// @notice Модификатор для проверки активного пользователя
     modifier onlyActiveUser() {
         require(users[msg.sender].status == UserStatus.Active, "User not active");
+        _;
+    }
+
+    /// @notice Модификатор: только владелец или DAO Governance
+    modifier onlyOwnerOrGovernance() {
+        require(msg.sender == owner() || msg.sender == DAOGovernanceAddress, "Only owner or DAO Governance");
         _;
     }
 
@@ -143,7 +162,8 @@ contract DAOUsers is ReentrancyGuard, Ownable {
             referrer: msg.sender,
             registered: block.timestamp,
             rating: 5,
-            verificationsCount: 100
+            verificationsCount: 100,
+            firstLevelReferrals: new address[](0)
         });
         users[msg.sender] = founderUser;
         bytes32 nameHash = keccak256(abi.encodePacked("founder"));
@@ -159,13 +179,12 @@ contract DAOUsers is ReentrancyGuard, Ownable {
         require(users[msg.sender].status == UserStatus.Active, "Only active users can create invites");
         require(invitee != address(0), "Invalid invitee address");
         require(activeInvitesCount[msg.sender] < MAX_ACTIVE_INVITES, "Maximum active invites reached");
+        require(users[msg.sender].firstLevelReferrals.length < 6, "Maximum first-level referrals reached");
 
         Invite storage existing = activeInvites[invitee];
-        require(!existing.active || existing.expiration < block.timestamp, "Active invite already exists for invitee");
+        require(!existing.active, "Active invite already exists for invitee");
 
-        inviteCounter++;
         Invite memory newInvite = Invite({
-            id: inviteCounter,
             inviter: msg.sender,
             invitee: invitee,
             expiration: block.timestamp + INVITE_VALIDITY,
@@ -174,7 +193,7 @@ contract DAOUsers is ReentrancyGuard, Ownable {
 
         activeInvites[invitee] = newInvite;
         activeInvitesCount[msg.sender]++;
-        emit InviteCreated(newInvite.id, msg.sender, invitee, newInvite.expiration);
+        emit InviteCreated(msg.sender, invitee, newInvite.expiration);
     }
 
     /// @notice Зарегистрировать пользователя по приглашению
@@ -198,13 +217,15 @@ contract DAOUsers is ReentrancyGuard, Ownable {
             referrer: invite.inviter,
             registered: block.timestamp,
             rating: 5,
-            verificationsCount: 0
+            verificationsCount: 0,
+            firstLevelReferrals: new address[](0)
         });
 
         userNames[nameHash] = msg.sender;
         invite.active = false;
         activeInvitesCount[invite.inviter]--;
         usersCount++;
+        users[invite.inviter].firstLevelReferrals.push(msg.sender);
         emit UserRegistered(msg.sender, name, invite.inviter);
     }
 
@@ -323,6 +344,31 @@ contract DAOUsers is ReentrancyGuard, Ownable {
         delete activeVerifications[_requester];
     }
 
+    /// @notice Пополнить баланс пользователя, отправив средства на контракт
+    /// @dev Средства зачисляются на баланс отправителя
+    function deposit() external payable {
+        require(msg.value > 0, "Deposit amount must be greater than zero");
+        balances[msg.sender] += msg.value;
+        emit Deposit(msg.sender, msg.value);
+    }
+
+    /// @notice Добавить сервис (только owner или DAO Governance)
+    function addService(string calldata name, address serviceAddress) external onlyOwnerOrGovernance {
+        require(serviceAddress != address(0), "Invalid service address");
+        services[name] = Service({name: name, serviceAddress: serviceAddress, exists: true});
+    }
+
+    /// @notice Удалить сервис (только owner или DAO Governance)
+    function removeService(string calldata name) external onlyOwnerOrGovernance {
+        require(services[name].exists, "Service does not exist");
+        delete services[name];
+    }
+
+    /// @notice Получить массив рефералов первого уровня
+    function getFirstLevelReferrals(address user) external view returns (address[] memory) {
+        return users[user].firstLevelReferrals;
+    }
+
     // ============ Управление DAO ============
     function setDAOGovernanceAddress(address _daoGovernance) external onlyOwner {
         require(_daoGovernance != address(0), "Zero address");
@@ -372,5 +418,12 @@ contract DAOUsers is ReentrancyGuard, Ownable {
         require(users[user].userAddress != address(0), "User not found");
         // Устанавливаем новое значение verificationsCount
         users[user].verificationsCount = count;
+    }
+
+    /// @notice Получить статус пользователя по адресу
+    /// @param user адрес пользователя
+    /// @return статус пользователя (UserStatus)
+    function getUserStatus(address user) external view returns (UserStatus) {
+        return users[user].status;
     }
 }

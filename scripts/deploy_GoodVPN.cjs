@@ -6,17 +6,17 @@ const path = require("path");
 async function main() {
   // Получаем параметры из переменных окружения или задаём по умолчанию
   const owner =
-    process.env.GOODVPN_OWNER || (await hre.ethers.getSigners())[0].address;
+    process.env.DEPLOY_OWNER || (await hre.ethers.getSigners())[0].address;
   const daoServices =
-    process.env.GOODVPN_DAOSERVICES ||
+    process.env.DEPLOY_DAOSERVICES ||
     (await hre.ethers.getSigners())[1].address;
   const daoPartnerProgram =
-    process.env.GOODVPN_DAOPARTNER ||
+    process.env.DEPLOY_DAOPARTNERPROGRAM ||
     (await hre.ethers.getSigners())[2].address;
 
   // Деплой контракта
   const GoodVPN = await hre.ethers.getContractFactory("GoodVPN");
-  const goodVPN = await GoodVPN.deploy(owner, daoServices, daoPartnerProgram);
+  const goodVPN = await GoodVPN.deploy(owner, daoPartnerProgram);
   await goodVPN.waitForDeployment();
   console.log("GoodVPN deployed to:", goodVPN.target);
 
