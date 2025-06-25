@@ -4,21 +4,21 @@ pragma solidity ^0.8.27;
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-/// @title GoodVibeLive - DAO GOOD VIBE LIVE
-/// @author GOOD VIBE LIVE DEVELOPMENT
+/// @title GoodVibe - DAO "GOOD VIBE"
+/// @author GOOD VIBE DEVELOPMENT
 /// @notice Контракт для регистрации пользователей, приглашений и верификаций в DAO
 /// @custom:evm-version paris
 /// @custom:security-contact goodvibe.live/securityalert telegram: @goodvibedevbot
 
-contract GoodVibeLive is ReentrancyGuard, Ownable {
+contract GoodVibe is ReentrancyGuard, Ownable {
     // ============ Constants ============
     /// @notice Максимальная длина имени пользователя
     uint256 public constant MAX_NAME_LENGTH = 99;
     /// @notice Максимальное количество активных приглашений для одного пользователя
     uint256 public constant MAX_ACTIVE_INVITES = 6;
-    /// @notice Время действия приглашения
+    /// @notice Время действия приглашения (в секундах)
     uint constant INVITE_VALIDITY = 1 days;
-    /// @notice Время действия верификации
+    /// @notice Время действия верификации (в секундах)
     uint constant VERIFICATION_VALIDITY = 3 days;
 
     // ============ State Variables ============
@@ -33,13 +33,13 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
     /// @notice Маппинг адресов на данные пользователей
     mapping(address => User) public users;
 
-    /// @notice Маппинг активных приглашений
+    /// @notice Маппинг активных приглашений (адрес пользователя -> приглашение)
     mapping(address => Invite) public activeInvites;
 
-    /// @notice Маппинг активных верификаций
+    /// @notice Маппинг активных верификаций (адрес пользователя -> верификация)
     mapping(address => Verification) public activeVerifications;
 
-    /// @notice Маппинг истории верификаций пользователей
+    /// @notice Маппинг истории верификаций пользователей (адрес пользователя -> массив верификаций)
     mapping(address => Verification[]) public userVerifications;
 
     /// @notice Маппинг хэшей имён на адреса пользователей
@@ -48,11 +48,8 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
     /// @notice Маппинг количества активных приглашений для каждого пользователя
     mapping(address => uint256) private activeInvitesCount;
 
-    /// @notice Маппинг балансов пользователей
-    mapping(address => uint256) public balances;
-
-    /// @notice Маппинг названий сервисов на адреса сервисов
-    mapping(string => Service) public services;
+    /// @notice Маппинг адреса пользователя к массиву рефералов первого уровня
+    mapping(address => address[]) public firstLevelReferrals;
 
     // ============ Enums ============
     /// @notice Статусы пользователя в системе
@@ -88,7 +85,6 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
         uint registered;          // Время регистрации (timestamp)
         uint rating;              // Рейтинг пользователя
         uint verificationsCount;  // Количество успешных верификаций
-        address[] firstLevelReferrals; // массив рефералов первого уровня
     }
 
     /// @notice Структура приглашения
@@ -113,13 +109,6 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
         bytes32 verificationHash;         // Хэш верификации
     }
 
-    /// @notice Структура сервиса
-    struct Service {
-        string name; // Название сервиса
-        address serviceAddress; // Адрес контракта сервиса
-        bool exists; // Флаг существования
-    }
-
     // ============ Events ============
     /// @notice Событие создания приглашения
     event InviteCreated(address indexed inviter, address indexed invitee, uint expiration);
@@ -129,28 +118,21 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
     event VerificationStarted(uint indexed id, address indexed verificator, address indexed verifiable, string ipfsCID);
     /// @notice Событие изменения статуса верификации
     event VerificationStatusChanged(address indexed requester, VerificationStatus status, string comment);
-    /// @notice Событие пополнения баланса
-    event Deposit(address indexed user, uint256 amount);
 
     // ============ Modifiers ============
     /// @notice Модификатор для проверки управления DAO
     modifier onlyDAOGovernance() {
-        require(msg.sender == DAOGovernanceAddress, "Only DAO Governance");
+        require(msg.sender == DAOGovernanceAddress, "Only DAO Governance"); // Только DAO Governance
         _;
     }
     /// @notice Модификатор для проверки активного пользователя
     modifier onlyActiveUser() {
-        require(users[msg.sender].status == UserStatus.Active, "User not active");
-        _;
-    }
-
-    /// @notice Модификатор: только владелец или DAO Governance
-    modifier onlyOwnerOrGovernance() {
-        require(msg.sender == owner() || msg.sender == DAOGovernanceAddress, "Only owner or DAO Governance");
+        require(users[msg.sender].status == UserStatus.Active, "User not active"); // Только активный пользователь
         _;
     }
 
     // ============ Конструктор ============
+    /// @notice Конструктор контракта. Регистрирует основателя DAO.
     constructor() Ownable(msg.sender) {
         founder = msg.sender;
         User memory founderUser = User({
@@ -162,10 +144,11 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
             referrer: msg.sender,
             registered: block.timestamp,
             rating: 5,
-            verificationsCount: 100,
-            firstLevelReferrals: new address[](0)
+            verificationsCount: 100
         });
         users[msg.sender] = founderUser;
+        // Инициализация массива рефералов основателя
+        firstLevelReferrals[msg.sender] = new address[](0);
         bytes32 nameHash = keccak256(abi.encodePacked("founder"));
         userNames[nameHash] = msg.sender;
         usersCount = 1;
@@ -175,14 +158,15 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
 
     /// @notice Создать приглашение для нового пользователя
     /// @param invitee Адрес приглашаемого пользователя
+    /// @dev Только активный пользователь может создать приглашение. Лимит — 6 активных приглашений и 6 рефералов.
     function createInvite(address invitee) external nonReentrant {
-        require(users[msg.sender].status == UserStatus.Active, "Only active users can create invites");
-        require(invitee != address(0), "Invalid invitee address");
-        require(activeInvitesCount[msg.sender] < MAX_ACTIVE_INVITES, "Maximum active invites reached");
-        require(users[msg.sender].firstLevelReferrals.length < 6, "Maximum first-level referrals reached");
+        require(users[msg.sender].status == UserStatus.Active, "Only active users can create invites"); // Только активный пользователь
+        require(invitee != address(0), "Invalid invitee address"); // Проверка адреса
+        require(activeInvitesCount[msg.sender] < MAX_ACTIVE_INVITES, "Maximum active invites reached"); // Лимит приглашений
+        require(firstLevelReferrals[msg.sender].length < 6, "Maximum first-level referrals reached"); // Лимит рефералов
 
         Invite storage existing = activeInvites[invitee];
-        require(!existing.active, "Active invite already exists for invitee");
+        require(!existing.active, "Active invite already exists for invitee"); // Уже есть активное приглашение
 
         Invite memory newInvite = Invite({
             inviter: msg.sender,
@@ -198,15 +182,17 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
 
     /// @notice Зарегистрировать пользователя по приглашению
     /// @param name Имя пользователя
+    /// @dev Проверяет уникальность имени, наличие приглашения, лимит рефералов у пригласившего
     function registerUser(string calldata name) external nonReentrant {
-        require(bytes(name).length <= MAX_NAME_LENGTH, "Name too long");
+        require(bytes(name).length <= MAX_NAME_LENGTH, "Name too long"); // Проверка длины имени
         bytes32 nameHash = keccak256(abi.encodePacked(name));
-        require(userNames[nameHash] == address(0), "Name already taken");
+        require(userNames[nameHash] == address(0), "Name already taken"); // Имя занято
 
         Invite storage invite = activeInvites[msg.sender];
-        require(invite.active, "No active invite for caller");
-        require(invite.expiration >= block.timestamp, "Invite expired");
-        require(users[msg.sender].status != UserStatus.Active, "User already registered");
+        require(invite.active, "No active invite for caller"); // Нет приглашения
+        require(invite.expiration >= block.timestamp, "Invite expired"); // Приглашение истекло
+        require(!isUserRegistered(msg.sender), "User already registered"); // Уже зарегистрирован
+        require(firstLevelReferrals[invite.inviter].length < 6, "Referrer has max referrals"); // Лимит рефералов у пригласившего
 
         users[msg.sender] = User({
             name: name,
@@ -217,36 +203,44 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
             referrer: invite.inviter,
             registered: block.timestamp,
             rating: 5,
-            verificationsCount: 0,
-            firstLevelReferrals: new address[](0)
+            verificationsCount: 0
         });
 
         userNames[nameHash] = msg.sender;
         invite.active = false;
         activeInvitesCount[invite.inviter]--;
         usersCount++;
-        users[invite.inviter].firstLevelReferrals.push(msg.sender);
+        firstLevelReferrals[invite.inviter].push(msg.sender); // Добавляем нового пользователя в рефералы пригласившего
         emit UserRegistered(msg.sender, name, invite.inviter);
     }
 
     /// @notice Получить количество активных приглашений у пользователя
+    /// @param user адрес пользователя
+    /// @return количество активных приглашений
     function getActiveInvitesCount(address user) external view returns (uint256) {
         return activeInvitesCount[user];
     }
 
     /// @notice Проверяет, зарегистрирован ли пользователь
+    /// @param user адрес пользователя
+    /// @return true если пользователь зарегистрирован
     function isUserRegistered(address user) public view returns (bool) {
         return users[user].userAddress != address(0);
     }
 
     /// @notice Создать запрос на верификацию
+    /// @param _verifier адрес верификатора
+    /// @param _encryptedFullName зашифрованное ФИО
+    /// @param _photoCID CID фото
+    /// @param _verificationHash хэш верификации
+    /// @dev Только активный пользователь может создать запрос. Проверяется статус верификатора и ограничения по времени.
     function createVerification(
         address _verifier,
         string memory _encryptedFullName,
         string memory _photoCID,
         bytes32 _verificationHash
     ) public nonReentrant {
-        require(users[msg.sender].status == UserStatus.Active, "Not registered or blocked");
+        require(users[msg.sender].status == UserStatus.Active, "Not registered or blocked"); // Только активный пользователь
 
         Verification storage current = activeVerifications[msg.sender];
         require(
@@ -255,11 +249,11 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
             current.status == VerificationStatus.Approved ||
             (current.created + VERIFICATION_VALIDITY < block.timestamp),
             "Active verification exists or not expired"
-        );
+        ); // Нет активной или не истекла
 
-        require(users[_verifier].status == UserStatus.Active, "Verifier not active");
-        require(bytes(_encryptedFullName).length <= 999, "Full name too long");
-        require(bytes(_photoCID).length <= 999, "Photo CID too long");
+        require(users[_verifier].status == UserStatus.Active, "Verifier not active"); // Верификатор должен быть активен
+        require(bytes(_encryptedFullName).length <= 999, "Full name too long"); // Ограничение длины ФИО
+        require(bytes(_photoCID).length <= 999, "Photo CID too long"); // Ограничение длины CID
 
         activeVerifications[msg.sender] = Verification({
             requester: msg.sender,
@@ -276,6 +270,9 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
     }
 
     /// @notice Подтвердить или отклонить верификацию
+    /// @param _requester адрес пользователя, проходящего верификацию
+    /// @param _verificationHash хэш верификации
+    /// @dev Только основатель или пользователь с 3+ успешными верификациями может подтверждать. Проверяется статус и права.
     function approveVerification(
         address _requester,
         bytes32 _verificationHash
@@ -283,16 +280,15 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
         require(
             msg.sender == founder || getApprovedVerificationsCount(msg.sender) >= 3,
             "Not enough approved verifications or not founder"
-        );
+        ); // Достаточно успешных верификаций или основатель
 
         Verification storage v = activeVerifications[_requester];
-        require(v.verifier == msg.sender, "Not your verification");
-        require(v.status == VerificationStatus.Pending, "Verification not pending");
+        require(v.verifier == msg.sender, "Not your verification"); // Только свой запрос
+        require(v.status == VerificationStatus.Pending, "Verification not pending"); // Должен быть в ожидании
 
         if (v.verificationHash == _verificationHash) {
             v.status = VerificationStatus.Approved;
             v.comment = "Approved";
-            users[_requester].verificationsCount += 1;
         } else {
             v.status = VerificationStatus.Rejected;
             v.comment = "Hash mismatch";
@@ -302,11 +298,15 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
     }
 
     /// @notice Получить историю верификаций пользователя
-    function getUserVerifications(address user) external view returns (Verification[] memory) {
+    /// @param user адрес пользователя
+    /// @return verifications массив верификаций
+    function getUserVerifications(address user) external view returns (Verification[] memory verifications) {
         return userVerifications[user];
     }
 
     /// @notice Получить историю верификаций как верификатор
+    /// @param verifier адрес верификатора
+    /// @return result массив верификаций
     function getVerifierVerifications(address verifier) external view returns (Verification[] memory result) {
         uint count = 0;
         for (uint i = 0; i < userVerifications[verifier].length; i++) {
@@ -326,6 +326,8 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
     }
 
     /// @notice Подсчитать количество успешных верификаций пользователя
+    /// @param _user адрес пользователя
+    /// @return количество успешных верификаций
     function getApprovedVerificationsCount(address _user) public view returns (uint) {
         uint count = 0;
         for (uint i = 0; i < userVerifications[_user].length; i++) {
@@ -336,52 +338,47 @@ contract GoodVibeLive is ReentrancyGuard, Ownable {
         return count;
     }
 
-    /// @dev Переносит верификацию в историю и удаляет из активных
+    /// @dev Переносит верификацию в историю и удаляет из активных. Увеличивает счётчик успешных верификаций при одобрении.
+    /// @param _requester адрес пользователя, проходящего верификацию
     function _finalizeVerification(address _requester) private {
         Verification storage v = activeVerifications[_requester];
+        // Если верификация одобрена, увеличиваем счётчик успешных верификаций
+        if (v.status == VerificationStatus.Approved) {
+            users[_requester].verificationsCount += 1;
+        }
         userVerifications[_requester].push(v);
         userVerifications[v.verifier].push(v);
         delete activeVerifications[_requester];
     }
 
-    /// @notice Пополнить баланс пользователя, отправив средства на контракт
-    /// @dev Средства зачисляются на баланс отправителя
-    function deposit() external payable {
-        require(msg.value > 0, "Deposit amount must be greater than zero");
-        balances[msg.sender] += msg.value;
-        emit Deposit(msg.sender, msg.value);
-    }
-
-    /// @notice Добавить сервис (только owner или DAO Governance)
-    function addService(string calldata name, address serviceAddress) external onlyOwnerOrGovernance {
-        require(serviceAddress != address(0), "Invalid service address");
-        services[name] = Service({name: name, serviceAddress: serviceAddress, exists: true});
-    }
-
-    /// @notice Удалить сервис (только owner или DAO Governance)
-    function removeService(string calldata name) external onlyOwnerOrGovernance {
-        require(services[name].exists, "Service does not exist");
-        delete services[name];
-    }
-
-    /// @notice Получить массив рефералов первого уровня
-    function getFirstLevelReferrals(address user) external view returns (address[] memory) {
-        return users[user].firstLevelReferrals;
+    /// @notice Получить массив рефералов первого уровня пользователя
+    /// @param user адрес пользователя
+    /// @return referrals массив адресов рефералов
+    function getFirstLevelReferrals(address user) external view returns (address[] memory referrals) {
+        return firstLevelReferrals[user];
     }
 
     // ============ Управление DAO ============
+    /// @notice Установить адрес DAO Governance
+    /// @param _daoGovernance адрес DAO Governance
     function setDAOGovernanceAddress(address _daoGovernance) external onlyOwner {
-        require(_daoGovernance != address(0), "Zero address");
+        require(_daoGovernance != address(0), "Zero address"); // Нельзя установить нулевой адрес
         DAOGovernanceAddress = _daoGovernance;
     }
 
+    /// @notice Установить статус пользователя
+    /// @param user адрес пользователя
+    /// @param status новый статус
     function setUserStatus(address user, UserStatus status) external onlyDAOGovernance nonReentrant {
-        require(users[user].userAddress != address(0), "User not found");
+        require(users[user].userAddress != address(0), "User not found"); // Пользователь должен существовать
         users[user].status = status;
     }
 
+    /// @notice Установить уровень пользователя
+    /// @param user адрес пользователя
+    /// @param level новый уровень
     function setUserLevel(address user, uint level) external onlyDAOGovernance nonReentrant {
-        require(users[user].userAddress != address(0), "User not found");
+        require(users[user].userAddress != address(0), "User not found"); // Пользователь должен существовать
         users[user].level = level;
     }
 

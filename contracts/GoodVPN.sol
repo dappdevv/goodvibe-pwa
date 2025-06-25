@@ -148,7 +148,7 @@ contract GoodVPN is Ownable, ReentrancyGuard {
         
         for (uint256 level = 0; level < 8; level++) {
             // Получаем данные пользователя из GoodVibeLive
-            (,,,,,, address referrer, uint8 status,,) = IGoodVibeLive(goodVibeLive).users(current);
+            (,, uint8 status, , , address referrer, , , , ) = IGoodVibeLive(goodVibeLive).users(current);
             
             if (referrer == address(0)) break; // Нет реферера
             
