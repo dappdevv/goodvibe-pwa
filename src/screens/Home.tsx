@@ -1,18 +1,11 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { publicClient } from "../blockchain/client";
 import { decryptData, encryptData } from "../utils/crypto";
 import { useNavigate } from "react-router-dom";
-import {
-  getUser,
-  createInvite,
-  createVerification,
-  getActiveVerification,
-} from "../blockchain/daoUsers";
+import { getActiveVerification } from "../blockchain/daoUsers";
 import { createWalletClientFromPrivateKey } from "../blockchain/client";
-import daoUsersAddress from "../blockchain/addresses/DAOUsers.json";
 import { mnemonicToAccount } from "viem/accounts";
 import { parseEther, isAddress, type Address, keccak256, toHex } from "viem";
-import DAOUsersAbi from "../blockchain/abi/DAOUsers.json";
 import {
   Card,
   CardHeader,
@@ -21,7 +14,6 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
@@ -35,39 +27,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { KeyRound, KeySquare } from "lucide-react";
-import DAOPartnerProgramAbi from "../blockchain/abi/DAOPartnerProgram.json";
-import DAOPartnerProgramAddress from "../blockchain/addresses/DAOPartnerProgram.json";
+import GoodVibeAbi from "../blockchain/abi/GoodVibe.json";
+import GoodVibeAddress from "../blockchain/addresses/GoodVibe.json";
 
 const IPFS_CAT = import.meta.env.VITE_IPFS_ENDPOINT + "cat/";
-
-// Статусы пользователя в DAO
-const UserStatus = {
-  None: 0,
-  Pending: 1,
-  Active: 2,
-  Inactive: 3,
-} as const;
-
-const UserStatusLabels = {
-  [UserStatus.None]: "Не зарегистрирован",
-  [UserStatus.Pending]: "Ожидает подтверждения",
-  [UserStatus.Active]: "Активный",
-  [UserStatus.Inactive]: "Неактивный",
-} as const;
-
-// Тип для структуры верификации из контракта
-interface VerificationStruct {
-  requester: string;
-  verifier: string;
-  encryptedFullName: string;
-  photoCID: string;
-  status: number;
-  comment: string;
-  created: bigint;
-  isInspected: boolean;
-  independentInspection: string;
-  verificationHash: string;
-}
 
 // --- DAOPartnerProgram UI ---
 // Статусы партнёра
@@ -90,14 +53,9 @@ export default function Home() {
   const [error, setError] = useState<string>("");
   const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
-  const [daoUser, setDaoUser] = useState<any>(null);
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteError, setInviteError] = useState("");
   const [privKeyCopied, setPrivKeyCopied] = useState(false);
   let privateKey: string | undefined = undefined;
   if (user) privateKey = (user as any).privateKey;
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteAddress, setInviteAddress] = useState("");
   const [showImportModal, setShowImportModal] = useState(false);
   const [importSeed, setImportSeed] = useState<string[]>(Array(12).fill(""));
   const [importError, setImportError] = useState("");
@@ -107,27 +65,6 @@ export default function Home() {
   const [sendAmount, setSendAmount] = useState("");
   const [sendError, setSendError] = useState("");
   const [sendLoading, setSendLoading] = useState(false);
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
-  const [registerName, setRegisterName] = useState("");
-  const [registerError, setRegisterError] = useState("");
-  const [registerLoading, setRegisterLoading] = useState(false);
-  const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [verificationFullName, setVerificationFullName] = useState("");
-  const [verificationKey, setVerificationKey] = useState("");
-  const [verificationPhoto, setVerificationPhoto] = useState<File | null>(null);
-  const [verificationPhotoPreview, setVerificationPhotoPreview] =
-    useState<string>("");
-  const [verificationLoading, setVerificationLoading] = useState(false);
-  const [verificationError, setVerificationError] = useState("");
-  const [verificationStatus, setVerificationStatus] = useState<any>(null);
-  const [showCamera, setShowCamera] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [dark, setDark] = useState(
-    typeof window !== "undefined" &&
-      document.documentElement.classList.contains("dark")
-  );
-  const [verificationVerifier, setVerificationVerifier] = useState("");
   const [showVerifierModal, setShowVerifierModal] = useState(false);
   const [verifyUserAddress, setVerifyUserAddress] = useState("");
   const [verifyKey, setVerifyKey] = useState("");
@@ -214,104 +151,6 @@ export default function Home() {
     })();
   }, []);
 
-  // Новый useEffect для запроса к DAOUsers
-  useEffect(() => {
-    if (!user) return;
-    try {
-      if (!user.address.startsWith("0x"))
-        throw new Error("Адрес пользователя должен начинаться с 0x");
-      (async () => {
-        const data = await getUser(user.address as `0x${string}`);
-        setDaoUser(data);
-      })();
-    } catch (e) {
-      console.error(
-        "[Home] Ошибка получения данных пользователя из контракта:",
-        e
-      );
-      setDaoUser(null);
-    }
-  }, [user]);
-
-  // useEffect для получения статуса текущей верификации
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        const arr = (await getActiveVerification(
-          user.address as Address
-        )) as any[];
-        // Преобразуем массив в объект VerificationStruct
-        const res: VerificationStruct = {
-          requester: arr[0],
-          verifier: arr[1],
-          encryptedFullName: arr[2],
-          photoCID: arr[3],
-          status: Number(arr[4]),
-          comment: arr[5],
-          created: arr[6],
-          isInspected: arr[7],
-          independentInspection: arr[8],
-          verificationHash: arr[9],
-        };
-        const statusNum = res.status;
-        if (arr && typeof statusNum === "number" && statusNum !== 0) {
-          setVerificationStatus({
-            status:
-              [
-                "Нет", // 0
-                "Ожидание", // 1
-                "Подтверждено", // 2
-                "Отклонено", // 3
-                "Раскрыто", // 4
-                "Приостановлено", // 5
-                "Верифицировано", // 6
-              ][statusNum] || statusNum,
-            raw: res,
-          });
-        } else {
-          setVerificationStatus(null);
-        }
-      } catch (e) {
-        setVerificationStatus(null);
-      }
-    })();
-  }, [user, showVerificationModal]);
-
-  // Управление потоком камеры для селфи
-  useEffect(() => {
-    if (!showCamera) return;
-    let stream: MediaStream | null = null;
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (err) {
-        setVerificationError("Не удалось получить доступ к камере");
-        setShowCamera(false);
-      }
-    })();
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showCamera]);
-
-  useEffect(() => {
-    if (dark) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, [dark]);
-
   const handleCopy = async () => {
     if (user) {
       await navigator.clipboard.writeText(user.address);
@@ -325,43 +164,6 @@ export default function Home() {
     navigate("/");
   };
 
-  const handleCreateInvite = async () => {
-    setInviteError("");
-    if (!inviteAddress) return;
-    if (!inviteAddress.startsWith("0x")) {
-      setInviteError("Адрес должен начинаться с 0x");
-      return;
-    }
-    setInviteLoading(true);
-    try {
-      const sessionId = localStorage.getItem("goodvibe_session_id");
-      const encrypted = sessionId
-        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
-        : null;
-      const pin = localStorage.getItem("goodvibe_pin");
-      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
-      const decrypted = await decryptData(encrypted, pin);
-      const userData = JSON.parse(decrypted);
-      const walletClient = createWalletClientFromPrivateKey(
-        userData.privateKey
-      );
-      await createInvite(walletClient, inviteAddress as `0x${string}`);
-      toast("Приглашение успешно создано!");
-      setShowInviteModal(false);
-      setInviteAddress("");
-    } catch (e: any) {
-      console.error(e);
-      setInviteError(
-        e?.shortMessage ||
-          e?.message ||
-          JSON.stringify(e) ||
-          "Ошибка создания приглашения"
-      );
-    }
-    setInviteLoading(false);
-  };
-
-  // Функция для загрузки и расшифровки фото
   const handleVerifierLoad = async () => {
     setVerifyError("");
     setVerifySuccess("");
@@ -383,24 +185,7 @@ export default function Home() {
       const arr = (await getActiveVerification(
         verifyUserAddress as Address
       )) as any[];
-      const verification: VerificationStruct = {
-        requester: arr[0],
-        verifier: arr[1],
-        encryptedFullName: arr[2],
-        photoCID: arr[3],
-        status: Number(arr[4]),
-        comment: arr[5],
-        created: arr[6],
-        isInspected: arr[7],
-        independentInspection: arr[8],
-        verificationHash: arr[9],
-      };
-      if (!verification || verification.status === 0) {
-        setVerifyError("Нет активной верификации для этого пользователя");
-        setVerifyPhotoLoading(false);
-        return;
-      }
-      const photoCID = verification.photoCID;
+      const photoCID = arr[3];
       // Загружаем фото с IPFS
       let endpoint = IPFS_CAT + photoCID;
       let fetchOptions: RequestInit = { method: "POST" };
@@ -446,8 +231,8 @@ export default function Home() {
     try {
       // Получаем referrer и статус
       const res = (await publicClient.readContract({
-        address: DAOPartnerProgramAddress.address as Address,
-        abi: DAOPartnerProgramAbi,
+        address: GoodVibeAddress.address as Address,
+        abi: GoodVibeAbi,
         functionName: "partners",
         args: [user.address as Address],
       })) as [string, number];
@@ -455,16 +240,16 @@ export default function Home() {
       setPartnerStatus(Number(res[1]));
       // Получаем лимит
       const max = await publicClient.readContract({
-        address: DAOPartnerProgramAddress.address as Address,
-        abi: DAOPartnerProgramAbi,
+        address: GoodVibeAddress.address as Address,
+        abi: GoodVibeAbi,
         functionName: "getMaxFirstLevelReferrals",
         args: [user.address as Address],
       });
       setMaxFirstLevel(Number(max));
       // Получаем рефералов первого уровня
       const refs = await publicClient.readContract({
-        address: DAOPartnerProgramAddress.address as Address,
-        abi: DAOPartnerProgramAbi,
+        address: GoodVibeAddress.address as Address,
+        abi: GoodVibeAbi,
         functionName: "getFirstLevelReferrals",
         args: [user.address as Address],
       });
@@ -486,8 +271,8 @@ export default function Home() {
     setLevelError("");
     try {
       const refs = await publicClient.readContract({
-        address: DAOPartnerProgramAddress.address as Address,
-        abi: DAOPartnerProgramAbi,
+        address: GoodVibeAddress.address as Address,
+        abi: GoodVibeAbi,
         functionName: "getReferralsAtLevel",
         args: [user?.address as Address, levelInput],
       });
@@ -520,8 +305,8 @@ export default function Home() {
         userData.privateKey
       );
       await walletClient.writeContract({
-        address: DAOPartnerProgramAddress.address as Address,
-        abi: DAOPartnerProgramAbi,
+        address: GoodVibeAddress.address as Address,
+        abi: GoodVibeAbi,
         functionName: "register",
         args: [referrerInput],
         chain: walletClient.chain,
@@ -554,10 +339,6 @@ export default function Home() {
       <Card className="w-full max-w-lg mx-auto px-2 sm:px-4">
         <CardHeader className="flex flex-row items-center justify-between pb-2 min-w-0">
           <CardTitle className="text-lg font-bold">Главная</CardTitle>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Тема</span>
-            <Switch checked={dark} onCheckedChange={setDark} />
-          </div>
         </CardHeader>
         <CardContent>
           <div className="mb-2">
@@ -710,508 +491,6 @@ export default function Home() {
                   Никому не показывайте seed фразу!
                   <br />
                   Она даёт полный доступ к вашему кошельку.
-                </div>
-              </div>
-            </div>
-          )}
-          {daoUser && (
-            <div className="bg-muted rounded-lg p-3 mb-4">
-              <div>
-                <b>Имя (из DAO):</b> {daoUser[0]}
-              </div>
-              <div>
-                <b>Адрес:</b> {daoUser[1]}
-              </div>
-              <div>
-                <b>Статус:</b>{" "}
-                {UserStatusLabels[
-                  daoUser[2] as keyof typeof UserStatusLabels
-                ] || daoUser[2]}
-              </div>
-              <div>
-                <b>Активность:</b> {daoUser[3]}
-              </div>
-              <div>
-                <b>Уровень:</b> {daoUser[4]}
-              </div>
-              <div>
-                <b>Пригласивший:</b> {daoUser[5]}
-              </div>
-            </div>
-          )}
-          {daoUser && (
-            <Button
-              variant="secondary"
-              className="w-full mb-4"
-              onClick={() => setShowInviteModal(true)}
-            >
-              Пригласить пользователя
-            </Button>
-          )}
-          {daoUser &&
-            daoUser[2] === UserStatus.Active &&
-            !verificationStatus && (
-              <Button
-                variant="secondary"
-                className="w-full mt-4"
-                onClick={() => setShowVerificationModal(true)}
-              >
-                Начать верификацию
-              </Button>
-            )}
-          {verificationStatus && (
-            <div className="bg-muted rounded-lg p-3 mb-4">
-              <b>Статус верификации:</b> {verificationStatus.status}
-              {verificationStatus.raw && (
-                <div className="mt-2 text-xs text-muted-foreground space-y-1">
-                  <div>
-                    <b>Запрашивающий:</b> {verificationStatus.raw.requester}
-                  </div>
-                  <div>
-                    <b>Верификатор:</b> {verificationStatus.raw.verifier}
-                  </div>
-                  <div>
-                    <b>photoCID:</b> {verificationStatus.raw.photoCID}
-                  </div>
-                  <div>
-                    <b>encryptedFullName:</b>{" "}
-                    {verificationStatus.raw.encryptedFullName}
-                  </div>
-                  <div>
-                    <b>Комментарий:</b> {verificationStatus.raw.comment}
-                  </div>
-                  <div>
-                    <b>Дата создания:</b>{" "}
-                    {verificationStatus.raw.created
-                      ? new Date(
-                          Number(verificationStatus.raw.created) * 1000
-                        ).toLocaleString()
-                      : "-"}
-                  </div>
-                  <div>
-                    <b>Независимая проверка:</b>{" "}
-                    {verificationStatus.raw.isInspected ? "Да" : "Нет"}
-                  </div>
-                  <div>
-                    <b>Отчёт независимой проверки:</b>{" "}
-                    {verificationStatus.raw.independentInspection || "-"}
-                  </div>
-                  <div>
-                    <b>Хэш верификации:</b>{" "}
-                    {verificationStatus.raw.verificationHash}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          {showVerificationModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0">
-              <div className="bg-white p-4 sm:p-8 rounded-lg w-full max-w-xs sm:max-w-md mx-auto max-h-[90vh] overflow-y-auto">
-                <h3 className="text-lg font-bold mb-4">
-                  Верификация пользователя
-                </h3>
-                <Input
-                  type="text"
-                  value={verificationFullName}
-                  onChange={(e) => setVerificationFullName(e.target.value)}
-                  placeholder="Фамилия Имя Отчество"
-                  className="mb-2"
-                  autoComplete="off"
-                />
-                <Input
-                  type="password"
-                  value={verificationKey}
-                  onChange={(e) => setVerificationKey(e.target.value)}
-                  placeholder="Ключ верификации (пароль)"
-                  className="mb-2"
-                  autoComplete="off"
-                />
-                <Input
-                  type="text"
-                  value={verificationVerifier}
-                  onChange={(e) => setVerificationVerifier(e.target.value)}
-                  placeholder="Адрес верификатора (0x...)"
-                  className="mb-2"
-                  autoComplete="off"
-                />
-                {verificationPhotoPreview && (
-                  <img
-                    src={verificationPhotoPreview}
-                    alt="Селфи"
-                    className="w-32 h-32 rounded-full object-cover mb-2"
-                  />
-                )}
-                {!showCamera && (
-                  <Button
-                    variant="secondary"
-                    className="w-full mb-2"
-                    onClick={() => setShowCamera(true)}
-                  >
-                    Сделать селфи
-                  </Button>
-                )}
-                {showCamera && (
-                  <div className="mb-2">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      width={240}
-                      height={180}
-                      className="rounded-lg bg-muted mb-2"
-                    />
-                    <canvas
-                      ref={canvasRef}
-                      width={240}
-                      height={180}
-                      style={{ display: "none" }}
-                    />
-                    <div className="flex gap-2 mt-2">
-                      <Button
-                        variant="secondary"
-                        className="flex-1"
-                        onClick={async () => {
-                          if (!videoRef.current || !canvasRef.current) return;
-                          const ctx = canvasRef.current.getContext("2d");
-                          if (!ctx) return;
-                          ctx.drawImage(videoRef.current, 0, 0, 240, 180);
-                          canvasRef.current.toBlob((blob) => {
-                            if (blob) {
-                              setVerificationPhoto(
-                                new File([blob], "selfie.png", {
-                                  type: "image/png",
-                                })
-                              );
-                              setVerificationPhotoPreview(
-                                URL.createObjectURL(blob)
-                              );
-                            }
-                          }, "image/png");
-                          setShowCamera(false);
-                          // Остановить камеру
-                          if (videoRef.current.srcObject) {
-                            const tracks = (
-                              videoRef.current.srcObject as MediaStream
-                            ).getTracks();
-                            tracks.forEach((track) => track.stop());
-                          }
-                        }}
-                      >
-                        Сфотографировать
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="flex-1"
-                        onClick={() => {
-                          setShowCamera(false);
-                          if (videoRef.current && videoRef.current.srcObject) {
-                            const tracks = (
-                              videoRef.current.srcObject as MediaStream
-                            ).getTracks();
-                            tracks.forEach((track) => track.stop());
-                          }
-                        }}
-                      >
-                        Отмена
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {verificationError && (
-                  <div className="text-red-500 mb-2">{verificationError}</div>
-                )}
-                <div className="flex gap-4 mt-4">
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={() => {
-                      setShowVerificationModal(false);
-                      setVerificationFullName("");
-                      setVerificationKey("");
-                      setVerificationPhoto(null);
-                      setVerificationPhotoPreview("");
-                      setVerificationError("");
-                    }}
-                  >
-                    Отмена
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={async () => {
-                      setVerificationError("");
-                      setVerificationLoading(true);
-                      try {
-                        if (!user) throw new Error("Нет пользователя");
-                        if (
-                          !verificationFullName ||
-                          !verificationKey ||
-                          !verificationPhoto
-                        )
-                          throw new Error(
-                            "Заполните все поля и сделайте селфи"
-                          );
-                        // 1. Зашифровать ФИО
-                        const encryptedFullName = await encryptData(
-                          verificationFullName,
-                          verificationKey
-                        );
-                        // 2. Зашифровать фото (читаем как base64, шифруем как строку)
-                        const photoBase64 = await new Promise<string>(
-                          (resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onload = () =>
-                              resolve(reader.result as string);
-                            reader.onerror = reject;
-                            reader.readAsDataURL(verificationPhoto);
-                          }
-                        );
-                        const encryptedPhoto = await encryptData(
-                          photoBase64,
-                          verificationKey
-                        );
-                        // 3. Загружаем зашифрованное фото на IPFS
-                        const formData = new FormData();
-                        const blob = new Blob([encryptedPhoto], {
-                          type: "text/plain",
-                        });
-                        formData.append("path", blob, "photo.enc");
-                        let endpoint =
-                          import.meta.env.VITE_IPFS_ENDPOINT + "add";
-                        let fetchOptions: RequestInit = {
-                          method: "POST",
-                          body: formData,
-                        };
-                        // Если есть переменная окружения для авторизации — используем её
-                        if (import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION) {
-                          fetchOptions.headers = {
-                            ...(fetchOptions.headers || {}),
-                            // Устанавливаем заголовок авторизации из переменной окружения
-                            Authorization: import.meta.env
-                              .VITE_IPFS_ENDPOINT_AUTHORIZATION,
-                          };
-                        }
-                        const res = await fetch(endpoint, fetchOptions);
-                        if (!res.ok)
-                          throw new Error("Ошибка загрузки фото на IPFS");
-                        const data = await res.json();
-                        if (!data.Hash) throw new Error("IPFS не вернул CID");
-                        const photoCID = data.Hash;
-                        // 4. Хэш верификации
-                        const verificationHash = keccak256(
-                          toHex(verificationFullName)
-                        );
-                        // 5. Верификатор (валидируем адрес)
-                        let verifier: Address;
-                        if (
-                          verificationVerifier &&
-                          verificationVerifier.startsWith("0x") &&
-                          verificationVerifier.length === 42
-                        ) {
-                          verifier = verificationVerifier as Address;
-                        } else {
-                          verifier = user.address as Address;
-                        }
-                        // 6. Получаем walletClient
-                        const sessionId = localStorage.getItem(
-                          "goodvibe_session_id"
-                        );
-                        const encrypted = sessionId
-                          ? localStorage.getItem(
-                              `goodvibe_userdata_${sessionId}`
-                            )
-                          : null;
-                        const pin = localStorage.getItem("goodvibe_pin");
-                        if (!encrypted || !pin)
-                          throw new Error("Нет доступа к приватному ключу");
-                        const decrypted = await decryptData(encrypted, pin);
-                        const userData = JSON.parse(decrypted);
-                        const walletClient = createWalletClientFromPrivateKey(
-                          userData.privateKey
-                        );
-                        // 7. Вызов контракта
-                        await createVerification(
-                          walletClient,
-                          verifier,
-                          encryptedFullName,
-                          photoCID,
-                          verificationHash
-                        );
-                        setShowVerificationModal(false);
-                        setVerificationFullName("");
-                        setVerificationKey("");
-                        setVerificationPhoto(null);
-                        setVerificationPhotoPreview("");
-                        setVerificationError("");
-                        toast("Верификация отправлена!");
-                      } catch (e: any) {
-                        setVerificationError(
-                          e?.message || "Ошибка отправки верификации"
-                        );
-                      }
-                      setVerificationLoading(false);
-                    }}
-                    disabled={verificationLoading}
-                  >
-                    {verificationLoading ? "Отправка..." : "Отправить"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-          {daoUser && daoUser[2] === UserStatus.None && (
-            <Button
-              variant="secondary"
-              className="w-full mt-4"
-              onClick={() => setShowRegisterModal(true)}
-            >
-              Зарегистрироваться
-            </Button>
-          )}
-          {showInviteModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0">
-              <div className="bg-white p-6 rounded-lg w-full max-w-md mx-auto max-h-[90vh] overflow-y-auto">
-                <h3 className="text-lg font-bold mb-4">Создание приглашения</h3>
-                <Input
-                  type="text"
-                  value={inviteAddress}
-                  onChange={(e) => setInviteAddress(e.target.value)}
-                  placeholder="Введите адрес (0x...)"
-                  className="mb-4"
-                />
-                {inviteError && (
-                  <div className="text-red-500 mb-4">{inviteError}</div>
-                )}
-                <div className="flex gap-4">
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={() => {
-                      setShowInviteModal(false);
-                      setInviteError("");
-                      setInviteAddress("");
-                    }}
-                  >
-                    Отмена
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={handleCreateInvite}
-                    disabled={inviteLoading || !inviteAddress}
-                  >
-                    {inviteLoading ? "Создание..." : "Создать"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-          {showRegisterModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0">
-              <div className="bg-white p-4 sm:p-6 rounded-lg w-full max-w-xs sm:max-w-md mx-auto max-h-[90vh] overflow-y-auto">
-                <h3 className="text-lg font-bold mb-4">
-                  Регистрация пользователя
-                </h3>
-                <Input
-                  type="text"
-                  value={registerName}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(
-                      /[^a-zA-Zа-яА-Я0-9]/g,
-                      ""
-                    );
-                    setRegisterName(val);
-                  }}
-                  placeholder="Имя пользователя"
-                  minLength={3}
-                  maxLength={42}
-                  className="mb-2"
-                  autoComplete="off"
-                />
-                {registerError && (
-                  <div className="text-red-500 mb-2">{registerError}</div>
-                )}
-                <div className="flex gap-4">
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={() => {
-                      setShowRegisterModal(false);
-                      setRegisterName("");
-                      setRegisterError("");
-                    }}
-                  >
-                    Отмена
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={async () => {
-                      if (registerName.length < 3) {
-                        setRegisterError("Минимум 3 символа");
-                        return;
-                      }
-                      if (registerName.length > 42) {
-                        setRegisterError("Максимум 42 символа");
-                        return;
-                      }
-                      if (/[^a-zA-Zа-яА-Я0-9]/.test(registerName)) {
-                        setRegisterError(
-                          "Только буквы и цифры, без пробелов и спецсимволов"
-                        );
-                        return;
-                      }
-                      setRegisterError("");
-                      setRegisterLoading(true);
-                      try {
-                        const sessionId = localStorage.getItem(
-                          "goodvibe_session_id"
-                        );
-                        const encrypted = sessionId
-                          ? localStorage.getItem(
-                              `goodvibe_userdata_${sessionId}`
-                            )
-                          : null;
-                        const pin = localStorage.getItem("goodvibe_pin");
-                        if (!encrypted || !pin)
-                          throw new Error("Нет доступа к приватному ключу");
-                        const decrypted = await decryptData(encrypted, pin);
-                        const userData = JSON.parse(decrypted);
-                        const walletClient = createWalletClientFromPrivateKey(
-                          userData.privateKey
-                        );
-                        const hash = await walletClient.writeContract({
-                          address: daoUsersAddress.address as Address,
-                          abi: DAOUsersAbi,
-                          functionName: "registerUser",
-                          args: [registerName],
-                          chain: walletClient.chain,
-                          account: walletClient.account ?? null,
-                        });
-                        setShowRegisterModal(false);
-                        setRegisterName("");
-                        setRegisterError("");
-                        toast(`Регистрация отправлена!\nHash: ${hash}`);
-                        // Обновить данные пользователя после регистрации
-                        if (userData.address) {
-                          const updated = await getUser(userData.address);
-                          setDaoUser(updated);
-                        }
-                      } catch (e: any) {
-                        console.error(e);
-                        setRegisterError(
-                          e?.shortMessage ||
-                            e?.message ||
-                            JSON.stringify(e) ||
-                            "Ошибка регистрации"
-                        );
-                      }
-                      setRegisterLoading(false);
-                    }}
-                    disabled={registerLoading}
-                  >
-                    {registerLoading ? "Регистрация..." : "Зарегистрироваться"}
-                  </Button>
                 </div>
               </div>
             </div>
@@ -1657,8 +936,8 @@ export default function Home() {
                     );
                     // Вызов approveVerification
                     await walletClient.writeContract({
-                      address: daoUsersAddress.address as Address,
-                      abi: DAOUsersAbi,
+                      address: GoodVibeAddress.address as Address,
+                      abi: GoodVibeAbi,
                       functionName: "approveVerification",
                       args: [verifyUserAddress, hash],
                       chain: walletClient.chain,

@@ -63,6 +63,12 @@ export default function GoodVPN() {
   const [userBalance, setUserBalance] = useState<string>("0");
   const [depositAmount, setDepositAmount] = useState("");
   const [depositLoading, setDepositLoading] = useState(false);
+  // Добавляю хуки состояния для вывода средств
+  const [withdrawAddress, setWithdrawAddress] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [withdrawError, setWithdrawError] = useState("");
+  const [withdrawSuccess, setWithdrawSuccess] = useState("");
   // Получение адреса пользователя из localStorage
   useEffect(() => {
     const sessionId = localStorage.getItem("goodvibe_session_id");
@@ -474,6 +480,41 @@ export default function GoodVPN() {
     }
     setCommissionLoading(false);
   };
+  // Обработчик вывода средств
+  const handleWithdraw = async () => {
+    setWithdrawLoading(true);
+    setWithdrawError("");
+    setWithdrawSuccess("");
+    try {
+      const sessionId = localStorage.getItem("goodvibe_session_id");
+      const encrypted = sessionId
+        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
+        : null;
+      const pin = localStorage.getItem("goodvibe_pin");
+      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
+      const decrypted = await decryptData(encrypted, pin);
+      const userData = JSON.parse(decrypted);
+      const walletClient = createWalletClientFromPrivateKey(
+        userData.privateKey
+      );
+      await walletClient.writeContract({
+        address: GoodVPNAddress.address as Address,
+        abi: GoodVPNAbi,
+        functionName: "withdraw",
+        args: [withdrawAddress, parseFloat(withdrawAmount) * 1e18],
+        chain: walletClient.chain,
+        account: walletClient.account ?? null,
+      });
+      setWithdrawSuccess("Средства успешно выведены!");
+      setWithdrawAddress("");
+      setWithdrawAmount("");
+    } catch (e: any) {
+      setWithdrawError(
+        e?.shortMessage || e?.message || "Ошибка вывода средств"
+      );
+    }
+    setWithdrawLoading(false);
+  };
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-2">
       <Card className="w-full max-w-full sm:max-w-lg mx-auto px-2 sm:px-4">
@@ -818,6 +859,52 @@ export default function GoodVPN() {
                       tabIndex={0}
                     >
                       {daoServicesLoading ? "Установка..." : "Установить"}
+                    </Button>
+                  </div>
+                </div>
+                {/* Вывод средств */}
+                <div className="w-full max-w-lg mx-auto mt-10 mb-10 p-4 bg-muted rounded-lg border">
+                  <h2 className="text-xl font-bold mb-4">
+                    Вывод средств с GoodVPN
+                  </h2>
+                  {withdrawError && (
+                    <div className="text-red-500 mb-2">{withdrawError}</div>
+                  )}
+                  {withdrawSuccess && (
+                    <div className="text-green-600 mb-2">{withdrawSuccess}</div>
+                  )}
+                  <div className="flex flex-col gap-2 mb-2">
+                    <input
+                      type="text"
+                      className="input input-bordered"
+                      placeholder="Адрес получателя (0x...)"
+                      value={withdrawAddress}
+                      onChange={(e) => setWithdrawAddress(e.target.value)}
+                      aria-label="Адрес получателя"
+                      tabIndex={0}
+                    />
+                    <input
+                      type="number"
+                      className="input input-bordered"
+                      placeholder="Сумма (ETH)"
+                      value={withdrawAmount}
+                      onChange={(e) => setWithdrawAmount(e.target.value)}
+                      aria-label="Сумма для вывода"
+                      tabIndex={0}
+                      min={0}
+                      step={0.0001}
+                    />
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={handleWithdraw}
+                      disabled={
+                        withdrawLoading || !withdrawAddress || !withdrawAmount
+                      }
+                      aria-label="Вывести средства"
+                      tabIndex={0}
+                    >
+                      {withdrawLoading ? "Вывод..." : "Вывести"}
                     </Button>
                   </div>
                 </div>
