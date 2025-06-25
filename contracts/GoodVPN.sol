@@ -5,30 +5,45 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title GoodVPN - Контракт оплаты VPN сервиса
-/// @author GOOD VIBE LIVE DEVELOPMENT
+/// @author GOOD VIBE DEVELOPMENT
 /// @notice Контракт для оплаты VPN, учёта подписок и распределения комиссий по реферальной программе
 
-/// @notice Интерфейс для взаимодействия с контрактом GoodVibeLive
-interface IGoodVibeLive {
+/// @notice Интерфейс для взаимодействия с контрактом GoodVibe
+interface IGoodVibe {
+    // Перечисление статусов пользователя
+    enum UserStatus {
+        None,
+        Pending,
+        Active,
+        Inactive,
+        Paused,
+        Blocked
+    }
+
+    // Структура пользователя
+    struct User {
+        string name;
+        address userAddress;
+        UserStatus status;
+        uint activity;
+        uint level;
+        address referrer;
+        uint registered;
+        uint rating;
+        uint verificationsCount;
+    }
+
     /// @notice Получить данные пользователя
-    function users(address) external view returns (
-        string memory name,
-        address userAddress,
-        uint8 status,
-        uint activity,
-        uint level,
-        address referrer,
-        uint registered,
-        uint rating,
-        uint verificationsCount,
-        address[] memory firstLevelReferrals
-    );
-    
+    function users(address user) external view returns (User memory);
+
     /// @notice Проверить, зарегистрирован ли пользователь
-    function isUserRegistered(address) external view returns (bool);
+    function isUserRegistered(address user) external view returns (bool);
 
     /// @notice Получить статус пользователя
-    function getUserStatus(address) external view returns (uint8);
+    function getUserStatus(address user) external view returns (UserStatus);
+
+    /// @notice Получить массив рефералов первого уровня пользователя
+    function getFirstLevelReferrals(address user) external view returns (address[] memory);
 }
 
 contract GoodVPN is Ownable, ReentrancyGuard {
@@ -61,28 +76,41 @@ contract GoodVPN is Ownable, ReentrancyGuard {
     /// @notice Маппинг адреса пользователя к id сервера к подписке
     mapping(address => mapping(uint256 => Subscription)) public subscriptions;
 
-    /// @notice Адрес контракта GoodVibeLive
-    address public goodVibeLive;
+    /// @notice Адрес контракта GoodVibe
+    address public goodVibe;
     /// @notice Процент комиссии GoodVPN (по умолчанию 10)
     uint256 public commissionGoodVPN = 10;
 
     /// @notice Маппинг балансов пользователей
     mapping(address => uint256) public balances;
 
-    /// @notice Модификатор для проверки активного пользователя GoodVibeLive
+    /// @notice Модификатор для проверки активного пользователя GoodVibe
     modifier onlyActiveUser() {
-        require(IGoodVibeLive(goodVibeLive).isUserRegistered(msg.sender), "User not registered in GoodVibeLive");
-        require(IGoodVibeLive(goodVibeLive).getUserStatus(msg.sender) == 2, "User not active in GoodVibeLive"); // 2 = Active status
+        require(IGoodVibe(goodVibe).isUserRegistered(msg.sender), "User not registered in GoodVibe");
+        require(IGoodVibe(goodVibe).getUserStatus(msg.sender) == IGoodVibe.UserStatus.Active, "User not active in GoodVibe");
         _;
     }
 
     /// @notice Конструктор
     /// @param _owner адрес владельца
-    /// @param _goodVibeLive адрес контракта GoodVibeLive
-    constructor(address _owner, address _goodVibeLive) Ownable(_owner) {
+    /// @param _goodVibe адрес контракта GoodVibe
+    constructor(address _owner, address _goodVibe) Ownable(_owner) {
         require(_owner != address(0), "Invalid owner address");
-        require(_goodVibeLive != address(0), "Invalid GoodVibeLive address");
-        goodVibeLive = _goodVibeLive;
+        require(_goodVibe != address(0), "Invalid GoodVibe address");
+        goodVibe = _goodVibe;
+        // Добавляем тестовый сервер VPN при деплое
+        servers[serversCount] = ServerVPN({
+            id: serversCount,
+            created: block.timestamp,
+            expiration: 333 days,
+            location: "Test Location",
+            deviceAmount: 10,
+            description: "Test VPN Server",
+            price: 0.1 ether,
+            exists: true
+        });
+        emit ServerVPNAdded(serversCount, "Test Location", 0.1 ether);
+        serversCount++;
     }
 
     /// @notice Добавить VPN сервер (только владелец)
@@ -114,7 +142,7 @@ contract GoodVPN is Ownable, ReentrancyGuard {
         emit ServerVPNRemoved(serverId);
     }
 
-    /// @notice Оплатить VPN услугу с баланса пользователя (только активные пользователи GoodVibeLive)
+    /// @notice Оплатить VPN услугу с баланса пользователя (только активные пользователи GoodVibe)
     /// @param serverId id сервера
     function payVPN(uint256 serverId) external nonReentrant onlyActiveUser {
         ServerVPN storage server = servers[serverId];
@@ -147,23 +175,23 @@ contract GoodVPN is Ownable, ReentrancyGuard {
         address current = user;
         
         for (uint256 level = 0; level < 8; level++) {
-            // Получаем данные пользователя из GoodVibeLive
-            (,, uint8 status, , , address referrer, , , , ) = IGoodVibeLive(goodVibeLive).users(current);
+            // Получаем данные пользователя из GoodVibe
+            IGoodVibe.User memory userData = IGoodVibe(goodVibe).users(current);
             
-            if (referrer == address(0)) break; // Нет реферера
+            if (userData.referrer == address(0)) break; // Нет реферера
             
-            // Проверяем, что реферер активен (статус 2 = Active)
-            if (status == 2) {
+            // Проверяем, что реферер активен (статус Active)
+            if (userData.status == IGoodVibe.UserStatus.Active) {
                 uint256 reward = (amount * percents[level]) / 100;
                 // Выплата реферального вознаграждения через transfer с try/catch
-                try this._safeTransfer(referrer, reward) {
+                try this._safeTransfer(userData.referrer, reward) {
                 } catch Error(string memory reason) {
                     revert(string(abi.encodePacked("Referral transfer failed at level ", _uint2str(level), ": ", reason)));
                 } catch {
                     revert(string(abi.encodePacked("Referral transfer failed at level ", _uint2str(level), ": unknown error")));
                 }
             }
-            current = referrer;
+            current = userData.referrer;
         }
     }
 
@@ -216,10 +244,10 @@ contract GoodVPN is Ownable, ReentrancyGuard {
         to.transfer(amount);
     }
 
-    /// @notice Установить адрес контракта GoodVibeLive (только владелец)
-    function setGoodVibeLiveAddress(address _goodVibeLive) external onlyOwner {
-        require(_goodVibeLive != address(0), "Invalid GoodVibeLive address");
-        goodVibeLive = _goodVibeLive;
+    /// @notice Установить адрес контракта GoodVibe (только владелец)
+    function setGoodVibeAddress(address _goodVibe) external onlyOwner {
+        require(_goodVibe != address(0), "Invalid GoodVibe address");
+        goodVibe = _goodVibe;
     }
 
     /// @notice Позволяет принимать ETH напрямую и пополнять баланс пользователя

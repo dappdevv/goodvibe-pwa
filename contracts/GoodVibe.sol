@@ -278,7 +278,7 @@ contract GoodVibe is ReentrancyGuard, Ownable {
         bytes32 _verificationHash
     ) public nonReentrant {
         require(
-            msg.sender == founder || getApprovedVerificationsCount(msg.sender) >= 3,
+            msg.sender == founder || users[msg.sender].verificationsCount >= 3,
             "Not enough approved verifications or not founder"
         ); // Достаточно успешных верификаций или основатель
 
@@ -325,19 +325,6 @@ contract GoodVibe is ReentrancyGuard, Ownable {
         }
     }
 
-    /// @notice Подсчитать количество успешных верификаций пользователя
-    /// @param _user адрес пользователя
-    /// @return количество успешных верификаций
-    function getApprovedVerificationsCount(address _user) public view returns (uint) {
-        uint count = 0;
-        for (uint i = 0; i < userVerifications[_user].length; i++) {
-            if (userVerifications[_user][i].status == VerificationStatus.Approved) {
-                count++;
-            }
-        }
-        return count;
-    }
-
     /// @dev Переносит верификацию в историю и удаляет из активных. Увеличивает счётчик успешных верификаций при одобрении.
     /// @param _requester адрес пользователя, проходящего верификацию
     function _finalizeVerification(address _requester) private {
@@ -382,28 +369,22 @@ contract GoodVibe is ReentrancyGuard, Ownable {
         users[user].level = level;
     }
 
+    /// @notice Установить активность пользователя
+    /// @dev Только для контракта управления DAO
+    /// @param user Адрес пользователя
+    /// @param activity Новое значение активности
     function setUserActivity(address user, uint activity) external onlyDAOGovernance nonReentrant {
         require(users[user].userAddress != address(0), "User not found");
         users[user].activity = activity;
     }
 
+    /// @notice Установить рейтинг пользователя
+    /// @dev Только для контракта управления DAO
+    /// @param user Адрес пользователя
+    /// @param rating Новый рейтинг
     function setUserRating(address user, uint rating) external onlyDAOGovernance nonReentrant {
         require(users[user].userAddress != address(0), "User not found");
         users[user].rating = rating;
-    }
-
-    function incrementUserRating(address user, uint delta) external onlyDAOGovernance nonReentrant {
-        require(users[user].userAddress != address(0), "User not found");
-        users[user].rating += delta;
-    }
-
-    function decrementUserRating(address user, uint delta) external onlyDAOGovernance nonReentrant {
-        require(users[user].userAddress != address(0), "User not found");
-        if (users[user].rating > delta) {
-            users[user].rating -= delta;
-        } else {
-            users[user].rating = 0;
-        }
     }
 
     /// @notice Установить количество успешных верификаций пользователя
