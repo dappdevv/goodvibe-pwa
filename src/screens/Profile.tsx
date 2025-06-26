@@ -8,6 +8,7 @@ import { publicClient } from "../blockchain/client";
 import { type Address } from "viem";
 import { createWalletClientFromPrivateKey } from "../blockchain/client";
 import { keccak256, toHex } from "viem";
+import { Input } from "@/components/ui/input";
 
 const IPFS_CAT = import.meta.env.VITE_IPFS_ENDPOINT + "cat/";
 
@@ -76,6 +77,18 @@ export default function Profile() {
   const [showCamera, setShowCamera] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // --- Состояния для модалки верификации пользователя ---
+  const [showVerifierModal, setShowVerifierModal] = useState(false);
+  const [verifyUserAddress, setVerifyUserAddress] = useState("");
+  const [verifyKey, setVerifyKey] = useState("");
+  const [verifyPhotoUrl, setVerifyPhotoUrl] = useState("");
+  const [verifyPhotoLoading, setVerifyPhotoLoading] = useState(false);
+  const [verifyFullNameInput, setVerifyFullNameInput] = useState("");
+  const [verifyError, setVerifyError] = useState("");
+  const [verifySuccess, setVerifySuccess] = useState("");
+  const [verifyReady, setVerifyReady] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
 
   useEffect(() => {
     const sessionId = localStorage.getItem("goodvibe_session_id");
@@ -510,6 +523,96 @@ export default function Profile() {
     "6": "Верифицирована",
   };
 
+  // --- Функция handleVerifierLoad ---
+  const handleVerifierLoad = async () => {
+    setVerifyError("");
+    setVerifySuccess("");
+    setVerifyPhotoUrl("");
+    setVerifyReady(false);
+    setVerifyPhotoLoading(true);
+    try {
+      if (
+        !verifyUserAddress.startsWith("0x") ||
+        verifyUserAddress.length !== 42
+      ) {
+        setVerifyError("Некорректный адрес пользователя");
+        setVerifyPhotoLoading(false);
+        return;
+      }
+      if (!verifyKey) {
+        setVerifyError("Введите ключ верификации");
+        setVerifyPhotoLoading(false);
+        return;
+      }
+      // Получаем активную верификацию
+      const activeRaw = await publicClient.readContract({
+        address: GoodVibeAddress.address as Address,
+        abi: GoodVibeAbi,
+        functionName: "activeVerifications",
+        args: [verifyUserAddress],
+      });
+      const active: any = activeRaw;
+      console.log("activeRaw:", activeRaw);
+      let status: number | undefined = undefined;
+      // Статус теперь всегда по индексу 4 (см. структуру массива из консоли)
+      if (Array.isArray(active) && typeof active[4] !== "undefined") {
+        status = Number(active[4]);
+      }
+      console.log("status:", status);
+      if (typeof status === "undefined") {
+        setVerifyError("Не удалось определить статус верификации");
+        setVerifyPhotoLoading(false);
+        return;
+      }
+      if (status !== 1) {
+        setVerifyError("Нет активной верификации");
+        setVerifyPhotoLoading(false);
+        return;
+      }
+      // Получаем CID фото
+      const photoCID =
+        active.photoCID ||
+        active.photo ||
+        (Array.isArray(active) ? active[3] : undefined);
+      if (!photoCID) {
+        setVerifyError("CID фото не найден");
+        setVerifyPhotoLoading(false);
+        return;
+      }
+      let endpoint = IPFS_CAT + photoCID;
+      let fetchOptions: RequestInit = { method: "POST" };
+      if (import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION) {
+        fetchOptions.headers = {
+          ...(fetchOptions.headers || {}),
+          Authorization: import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION,
+        };
+      }
+      const res = await fetch(endpoint, fetchOptions);
+      if (!res.ok) {
+        setVerifyError("Ошибка загрузки фото с IPFS");
+        setVerifyPhotoLoading(false);
+        return;
+      }
+      const encryptedPhoto = await res.text();
+      // Расшифровываем фото
+      const decryptedPhotoBase64 = await decryptData(encryptedPhoto, verifyKey);
+      // base64 -> blob
+      const base64Data = decryptedPhotoBase64.split(",")[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: "image/png" });
+      setVerifyPhotoUrl(URL.createObjectURL(blob));
+      setVerifyReady(true);
+    } catch (e: any) {
+      setVerifyError(e?.message || "Ошибка расшифровки фото");
+    }
+    setVerifyPhotoLoading(false);
+  };
+
   return (
     <div className="container mx-auto py-8 px-2 sm:px-4">
       <h1 className="text-2xl font-bold mb-4">Профиль</h1>
@@ -698,6 +801,16 @@ export default function Profile() {
             >
               Сделать селфи
             </Button>
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={handleVerification}
+              disabled={verificationLoading}
+              aria-label="Отправить верификацию"
+              tabIndex={0}
+            >
+              {verificationLoading ? "Отправка..." : "Отправить верификацию"}
+            </Button>
           </div>
         </div>
       )}
@@ -822,6 +935,156 @@ export default function Profile() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      {/* Кнопка для открытия модалки верификации пользователя */}
+      <div className="w-full max-w-md mx-auto mb-8">
+        <Button
+          variant="secondary"
+          className="w-full"
+          onClick={() => {
+            setShowVerifierModal(true);
+            setVerifyUserAddress("");
+            setVerifyKey("");
+            setVerifyPhotoUrl("");
+            setVerifyFullNameInput("");
+            setVerifyError("");
+            setVerifySuccess("");
+            setVerifyReady(false);
+          }}
+        >
+          Верифицировать пользователя
+        </Button>
+      </div>
+      {/* Модалка верификации пользователя */}
+      {showVerifierModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0 z-50">
+          <div className="bg-white p-4 sm:p-6 rounded-lg w-full max-w-xs sm:max-w-md mx-auto max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-4">Верификация пользователя</h3>
+            <Input
+              type="text"
+              value={verifyUserAddress}
+              onChange={(e) => setVerifyUserAddress(e.target.value)}
+              placeholder="Адрес пользователя (0x...)"
+              className="mb-2"
+              autoComplete="off"
+            />
+            <Input
+              type="password"
+              value={verifyKey}
+              onChange={(e) => setVerifyKey(e.target.value)}
+              placeholder="Ключ верификации"
+              className="mb-2"
+              autoComplete="off"
+            />
+            <Button
+              variant="secondary"
+              className="w-full mb-2"
+              onClick={handleVerifierLoad}
+              disabled={verifyPhotoLoading || !verifyUserAddress || !verifyKey}
+            >
+              {verifyPhotoLoading ? "Загрузка..." : "Показать фото"}
+            </Button>
+            {verifyPhotoUrl && (
+              <img
+                src={verifyPhotoUrl}
+                alt="Фото пользователя"
+                className="w-32 h-32 rounded-full object-cover mb-2 mx-auto"
+              />
+            )}
+            {verifyReady && (
+              <Input
+                type="text"
+                value={verifyFullNameInput}
+                onChange={(e) => setVerifyFullNameInput(e.target.value)}
+                placeholder="ФИО пользователя (для подтверждения)"
+                className="mb-2"
+                autoComplete="off"
+              />
+            )}
+            {verifyError && (
+              <div className="text-red-500 mb-2">{verifyError}</div>
+            )}
+            {verifySuccess && (
+              <div className="text-green-600 mb-2">{verifySuccess}</div>
+            )}
+            <div className="flex gap-4 mt-4">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => {
+                  setShowVerifierModal(false);
+                  setVerifyUserAddress("");
+                  setVerifyKey("");
+                  setVerifyPhotoUrl("");
+                  setVerifyFullNameInput("");
+                  setVerifyError("");
+                  setVerifySuccess("");
+                  setVerifyReady(false);
+                }}
+              >
+                Отмена
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1"
+                disabled={!verifyReady || !verifyFullNameInput || verifyLoading}
+                onClick={async () => {
+                  setVerifyError("");
+                  setVerifySuccess("");
+                  setVerifyLoading(true);
+                  try {
+                    if (
+                      !verifyUserAddress.startsWith("0x") ||
+                      verifyUserAddress.length !== 42
+                    ) {
+                      throw new Error("Некорректный адрес пользователя");
+                    }
+                    if (!verifyFullNameInput) {
+                      throw new Error("Введите ФИО пользователя");
+                    }
+                    // Получаем хэш
+                    const hash = keccak256(toHex(verifyFullNameInput));
+                    // Получаем walletClient
+                    const sessionId = localStorage.getItem(
+                      "goodvibe_session_id"
+                    );
+                    const encrypted = sessionId
+                      ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
+                      : null;
+                    const pin = localStorage.getItem("goodvibe_pin");
+                    if (!encrypted || !pin)
+                      throw new Error("Нет доступа к приватному ключу");
+                    const decrypted = await decryptData(encrypted, pin);
+                    const userData = JSON.parse(decrypted);
+                    const walletClient = createWalletClientFromPrivateKey(
+                      userData.privateKey
+                    );
+                    // Вызов approveVerification
+                    await walletClient.writeContract({
+                      address: GoodVibeAddress.address as Address,
+                      abi: GoodVibeAbi,
+                      functionName: "approveVerification",
+                      args: [verifyUserAddress, hash],
+                      chain: walletClient.chain,
+                      account: walletClient.account ?? null,
+                    });
+                    setVerifySuccess("Пользователь успешно подтверждён!");
+                    setVerifyFullNameInput("");
+                  } catch (e: any) {
+                    setVerifyError(
+                      e?.shortMessage || e?.message || "Ошибка подтверждения"
+                    );
+                  }
+                  setVerifyLoading(false);
+                }}
+              >
+                {verifyLoading
+                  ? "Подтверждение..."
+                  : "Подтвердить пользователя"}
+              </Button>
+            </div>
           </div>
         </div>
       )}

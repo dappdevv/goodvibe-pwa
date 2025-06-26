@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import { publicClient } from "../blockchain/client";
 import { decryptData, encryptData } from "../utils/crypto";
 import { useNavigate } from "react-router-dom";
-import { getActiveVerification } from "../blockchain/daoUsers";
 import { createWalletClientFromPrivateKey } from "../blockchain/client";
 import { mnemonicToAccount } from "viem/accounts";
-import { parseEther, isAddress, type Address, keccak256, toHex } from "viem";
+import { parseEther, isAddress } from "viem";
 import {
   Card,
   CardHeader,
@@ -27,20 +26,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { KeyRound, KeySquare } from "lucide-react";
-import GoodVibeAbi from "../blockchain/abi/GoodVibe.json";
-import GoodVibeAddress from "../blockchain/addresses/GoodVibe.json";
 
 const IPFS_CAT = import.meta.env.VITE_IPFS_ENDPOINT + "cat/";
-
-// --- DAOPartnerProgram UI ---
-// Статусы партнёра
-const PartnerStatusLabels = [
-  "Нет", // 0
-  "Активный", // 1
-  "Неактивный", // 2
-  "Заблокирован", // 3
-  "Приостановлен", // 4
-];
 
 export default function Home() {
   const [user, setUser] = useState<{
@@ -65,32 +52,10 @@ export default function Home() {
   const [sendAmount, setSendAmount] = useState("");
   const [sendError, setSendError] = useState("");
   const [sendLoading, setSendLoading] = useState(false);
-  const [showVerifierModal, setShowVerifierModal] = useState(false);
-  const [verifyUserAddress, setVerifyUserAddress] = useState("");
-  const [verifyKey, setVerifyKey] = useState("");
-  const [verifyPhotoUrl, setVerifyPhotoUrl] = useState("");
-  const [verifyPhotoLoading, setVerifyPhotoLoading] = useState(false);
-  const [verifyFullNameInput, setVerifyFullNameInput] = useState("");
-  const [verifyError, setVerifyError] = useState("");
-  const [verifySuccess, setVerifySuccess] = useState("");
-  const [verifyLoading, setVerifyLoading] = useState(false);
-  const [verifyReady, setVerifyReady] = useState(false);
   const [showSeedDialog, setShowSeedDialog] = useState(false);
   const [showSeedModal, setShowSeedModal] = useState(false);
   const [seedWords, setSeedWords] = useState<string[]>([]);
   const [seedStep, setSeedStep] = useState(0);
-  // DAOPartnerProgram state
-  const [partnerStatus, setPartnerStatus] = useState<number | null>(null);
-  const [partnerReferrer, setPartnerReferrer] = useState<string>("");
-  const [firstLevelReferrals, setFirstLevelReferrals] = useState<string[]>([]);
-  const [maxFirstLevel, setMaxFirstLevel] = useState<number | null>(null);
-  const [referrerInput, setReferrerInput] = useState("");
-  const [partnerLoading, setPartnerLoading] = useState(false);
-  const [partnerError, setPartnerError] = useState("");
-  const [levelInput, setLevelInput] = useState(2);
-  const [levelReferrals, setLevelReferrals] = useState<string[]>([]);
-  const [levelLoading, setLevelLoading] = useState(false);
-  const [levelError, setLevelError] = useState("");
 
   useEffect(() => {
     const sessionId = localStorage.getItem("goodvibe_session_id");
@@ -162,163 +127,6 @@ export default function Home() {
   const handleLogout = () => {
     localStorage.removeItem("goodvibe_pin");
     navigate("/");
-  };
-
-  const handleVerifierLoad = async () => {
-    setVerifyError("");
-    setVerifySuccess("");
-    setVerifyPhotoUrl("");
-    setVerifyReady(false);
-    setVerifyPhotoLoading(true);
-    try {
-      if (!isAddress(verifyUserAddress)) {
-        setVerifyError("Некорректный адрес пользователя");
-        setVerifyPhotoLoading(false);
-        return;
-      }
-      if (!verifyKey) {
-        setVerifyError("Введите ключ верификации");
-        setVerifyPhotoLoading(false);
-        return;
-      }
-      // Получаем данные верификации
-      const arr = (await getActiveVerification(
-        verifyUserAddress as Address
-      )) as any[];
-      const photoCID = arr[3];
-      // Загружаем фото с IPFS
-      let endpoint = IPFS_CAT + photoCID;
-      let fetchOptions: RequestInit = { method: "POST" };
-      // Если есть переменная окружения для авторизации — используем её
-      if (import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION) {
-        fetchOptions.headers = {
-          ...(fetchOptions.headers || {}),
-          // Устанавливаем заголовок авторизации из переменной окружения
-          Authorization: import.meta.env.VITE_IPFS_ENDPOINT_AUTHORIZATION,
-        };
-      }
-      const res = await fetch(endpoint, fetchOptions);
-      if (!res.ok) {
-        setVerifyError("Ошибка загрузки фото с IPFS");
-        setVerifyPhotoLoading(false);
-        return;
-      }
-      const encryptedPhoto = await res.text();
-      // Расшифровываем фото
-      const decryptedPhotoBase64 = await decryptData(encryptedPhoto, verifyKey);
-      // base64 -> blob
-      const base64Data = decryptedPhotoBase64.split(",")[1];
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: "image/png" });
-      setVerifyPhotoUrl(URL.createObjectURL(blob));
-      setVerifyReady(true);
-    } catch (e: any) {
-      setVerifyError(e?.message || "Ошибка расшифровки фото");
-    }
-    setVerifyPhotoLoading(false);
-  };
-
-  // Загрузка данных партнёра
-  const loadPartnerData = async () => {
-    if (!user) return;
-    setPartnerLoading(true);
-    setPartnerError("");
-    try {
-      // Получаем referrer и статус
-      const res = (await publicClient.readContract({
-        address: GoodVibeAddress.address as Address,
-        abi: GoodVibeAbi,
-        functionName: "partners",
-        args: [user.address as Address],
-      })) as [string, number];
-      setPartnerReferrer(res[0]);
-      setPartnerStatus(Number(res[1]));
-      // Получаем лимит
-      const max = await publicClient.readContract({
-        address: GoodVibeAddress.address as Address,
-        abi: GoodVibeAbi,
-        functionName: "getMaxFirstLevelReferrals",
-        args: [user.address as Address],
-      });
-      setMaxFirstLevel(Number(max));
-      // Получаем рефералов первого уровня
-      const refs = await publicClient.readContract({
-        address: GoodVibeAddress.address as Address,
-        abi: GoodVibeAbi,
-        functionName: "getFirstLevelReferrals",
-        args: [user.address as Address],
-      });
-      setFirstLevelReferrals(refs as string[]);
-    } catch (e: any) {
-      setPartnerError(e?.message || "Ошибка загрузки данных партнёра");
-    }
-    setPartnerLoading(false);
-  };
-
-  useEffect(() => {
-    if (user) loadPartnerData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
-
-  // Загрузка рефералов на уровне
-  const handleLoadLevel = async () => {
-    setLevelLoading(true);
-    setLevelError("");
-    try {
-      const refs = await publicClient.readContract({
-        address: GoodVibeAddress.address as Address,
-        abi: GoodVibeAbi,
-        functionName: "getReferralsAtLevel",
-        args: [user?.address as Address, levelInput],
-      });
-      setLevelReferrals(refs as string[]);
-    } catch (e: any) {
-      setLevelError(e?.message || "Ошибка загрузки рефералов");
-    }
-    setLevelLoading(false);
-  };
-
-  // Регистрация в партнёрской программе
-  const handleRegisterPartner = async () => {
-    setPartnerError("");
-    setPartnerLoading(true);
-    try {
-      if (!isAddress(referrerInput)) {
-        setPartnerError("Некорректный адрес реферера");
-        setPartnerLoading(false);
-        return;
-      }
-      const sessionId = localStorage.getItem("goodvibe_session_id");
-      const encrypted = sessionId
-        ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
-        : null;
-      const pin = localStorage.getItem("goodvibe_pin");
-      if (!encrypted || !pin) throw new Error("Нет доступа к приватному ключу");
-      const decrypted = await decryptData(encrypted, pin);
-      const userData = JSON.parse(decrypted);
-      const walletClient = createWalletClientFromPrivateKey(
-        userData.privateKey
-      );
-      await walletClient.writeContract({
-        address: GoodVibeAddress.address as Address,
-        abi: GoodVibeAbi,
-        functionName: "register",
-        args: [referrerInput],
-        chain: walletClient.chain,
-        account: walletClient.account ?? null,
-      });
-      setReferrerInput("");
-      toast("Регистрация успешна! Ожидайте подтверждения.");
-      await loadPartnerData();
-    } catch (e: any) {
-      setPartnerError(e?.shortMessage || e?.message || "Ошибка регистрации");
-    }
-    setPartnerLoading(false);
   };
 
   if (error) {
@@ -495,146 +303,10 @@ export default function Home() {
               </div>
             </div>
           )}
-          {/* --- DAOPartnerProgram UI --- */}
-          <div className="w-full max-w-lg mx-auto mt-8 mb-8 p-4 bg-muted rounded-lg">
-            <h2 className="text-xl font-bold mb-4">Партнёрская программа</h2>
-            {partnerLoading ? (
-              <div className="text-center text-muted-foreground">
-                Загрузка...
-              </div>
-            ) : (
-              <>
-                {partnerStatus === 0 && (
-                  <div className="mb-4">
-                    <div className="mb-2">
-                      Вы не зарегистрированы в партнёрской программе.
-                    </div>
-                    <Input
-                      type="text"
-                      value={referrerInput}
-                      onChange={(e) => setReferrerInput(e.target.value)}
-                      placeholder="Адрес реферера (0x...)"
-                      className="mb-2"
-                      aria-label="Адрес реферера"
-                      tabIndex={0}
-                    />
-                    <Button
-                      variant="secondary"
-                      className="w-full"
-                      onClick={handleRegisterPartner}
-                      disabled={partnerLoading || !referrerInput}
-                      aria-label="Зарегистрироваться в партнёрской программе"
-                      tabIndex={0}
-                    >
-                      {partnerLoading ? "Регистрация..." : "Зарегистрироваться"}
-                    </Button>
-                  </div>
-                )}
-                {partnerStatus !== null && partnerStatus !== 0 && (
-                  <div className="mb-4">
-                    <div>
-                      <b>Статус:</b>{" "}
-                      {PartnerStatusLabels[partnerStatus] || partnerStatus}
-                    </div>
-                    <div>
-                      <b>Ваш реферер:</b> {partnerReferrer}
-                    </div>
-                    <div>
-                      <b>Лимит рефералов 1 уровня:</b> {maxFirstLevel}
-                    </div>
-                    <div>
-                      <b>Рефералы 1 уровня:</b>
-                      <ul className="list-disc ml-6">
-                        {firstLevelReferrals.length === 0 && <li>Нет</li>}
-                        {firstLevelReferrals.map((addr) => (
-                          <li key={addr} className="break-all">
-                            {addr}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                )}
-                <div className="mb-4">
-                  <label htmlFor="levelInput" className="block mb-1">
-                    Показать рефералов на уровне:
-                  </label>
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      id="levelInput"
-                      type="number"
-                      min={1}
-                      max={8}
-                      value={levelInput}
-                      onChange={(e) => setLevelInput(Number(e.target.value))}
-                      className="w-20"
-                      aria-label="Уровень рефералов"
-                      tabIndex={0}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={handleLoadLevel}
-                      disabled={levelLoading}
-                      aria-label="Показать рефералов на уровне"
-                      tabIndex={0}
-                    >
-                      {levelLoading ? "Загрузка..." : "Показать"}
-                    </Button>
-                  </div>
-                  {levelError && (
-                    <div className="text-red-500 mt-2">{levelError}</div>
-                  )}
-                  {levelReferrals.length > 0 && (
-                    <ul className="list-disc ml-6 mt-2">
-                      {levelReferrals.map((addr) => (
-                        <li key={addr} className="break-all">
-                          {addr}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {levelReferrals.length === 0 && !levelLoading && (
-                    <div className="text-muted-foreground mt-2">
-                      Нет рефералов на этом уровне
-                    </div>
-                  )}
-                </div>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={loadPartnerData}
-                  disabled={partnerLoading}
-                  aria-label="Обновить данные партнёра"
-                  tabIndex={0}
-                >
-                  Обновить
-                </Button>
-                {partnerError && (
-                  <div className="text-red-500 mt-2">{partnerError}</div>
-                )}
-              </>
-            )}
-          </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-2 w-full">
           <Button variant="outline" className="w-full" onClick={handleLogout}>
             Завершить сеанс
-          </Button>
-          <Button
-            variant="secondary"
-            className="w-full"
-            onClick={() => {
-              setShowVerifierModal(true);
-              setVerifyUserAddress("");
-              setVerifyKey("");
-              setVerifyPhotoUrl("");
-              setVerifyFullNameInput("");
-              setVerifyError("");
-              setVerifySuccess("");
-              setVerifyReady(false);
-            }}
-          >
-            Верифицировать пользователя
           </Button>
         </CardFooter>
       </Card>
@@ -829,133 +501,6 @@ export default function Home() {
                 disabled={importLoading}
               >
                 {importLoading ? "Импорт..." : "Импортировать"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showVerifierModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-2 sm:px-0">
-          <div className="bg-white p-4 sm:p-6 rounded-lg w-full max-w-xs sm:max-w-md mx-auto max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold mb-4">Верификация пользователя</h3>
-            <Input
-              type="text"
-              value={verifyUserAddress}
-              onChange={(e) => setVerifyUserAddress(e.target.value)}
-              placeholder="Адрес пользователя (0x...)"
-              className="mb-2"
-              autoComplete="off"
-            />
-            <Input
-              type="password"
-              value={verifyKey}
-              onChange={(e) => setVerifyKey(e.target.value)}
-              placeholder="Ключ верификации"
-              className="mb-2"
-              autoComplete="off"
-            />
-            <Button
-              variant="secondary"
-              className="w-full mb-2"
-              onClick={handleVerifierLoad}
-              disabled={verifyPhotoLoading || !verifyUserAddress || !verifyKey}
-            >
-              {verifyPhotoLoading ? "Загрузка..." : "Показать фото"}
-            </Button>
-            {verifyPhotoUrl && (
-              <img
-                src={verifyPhotoUrl}
-                alt="Фото пользователя"
-                className="w-32 h-32 rounded-full object-cover mb-2 mx-auto"
-              />
-            )}
-            {verifyReady && (
-              <Input
-                type="text"
-                value={verifyFullNameInput}
-                onChange={(e) => setVerifyFullNameInput(e.target.value)}
-                placeholder="ФИО пользователя (для подтверждения)"
-                className="mb-2"
-                autoComplete="off"
-              />
-            )}
-            {verifyError && (
-              <div className="text-red-500 mb-2">{verifyError}</div>
-            )}
-            {verifySuccess && (
-              <div className="text-green-600 mb-2">{verifySuccess}</div>
-            )}
-            <div className="flex gap-4 mt-4">
-              <Button
-                variant="secondary"
-                className="flex-1"
-                onClick={() => {
-                  setShowVerifierModal(false);
-                  setVerifyUserAddress("");
-                  setVerifyKey("");
-                  setVerifyPhotoUrl("");
-                  setVerifyFullNameInput("");
-                  setVerifyError("");
-                  setVerifySuccess("");
-                  setVerifyReady(false);
-                }}
-              >
-                Отмена
-              </Button>
-              <Button
-                variant="secondary"
-                className="flex-1"
-                disabled={!verifyReady || !verifyFullNameInput || verifyLoading}
-                onClick={async () => {
-                  setVerifyError("");
-                  setVerifySuccess("");
-                  setVerifyLoading(true);
-                  try {
-                    if (!isAddress(verifyUserAddress)) {
-                      throw new Error("Некорректный адрес пользователя");
-                    }
-                    if (!verifyFullNameInput) {
-                      throw new Error("Введите ФИО пользователя");
-                    }
-                    // Получаем хэш
-                    const hash = keccak256(toHex(verifyFullNameInput));
-                    // Получаем walletClient
-                    const sessionId = localStorage.getItem(
-                      "goodvibe_session_id"
-                    );
-                    const encrypted = sessionId
-                      ? localStorage.getItem(`goodvibe_userdata_${sessionId}`)
-                      : null;
-                    const pin = localStorage.getItem("goodvibe_pin");
-                    if (!encrypted || !pin)
-                      throw new Error("Нет доступа к приватному ключу");
-                    const decrypted = await decryptData(encrypted, pin);
-                    const userData = JSON.parse(decrypted);
-                    const walletClient = createWalletClientFromPrivateKey(
-                      userData.privateKey
-                    );
-                    // Вызов approveVerification
-                    await walletClient.writeContract({
-                      address: GoodVibeAddress.address as Address,
-                      abi: GoodVibeAbi,
-                      functionName: "approveVerification",
-                      args: [verifyUserAddress, hash],
-                      chain: walletClient.chain,
-                      account: walletClient.account ?? null,
-                    });
-                    setVerifySuccess("Пользователь успешно подтверждён!");
-                    setVerifyFullNameInput("");
-                  } catch (e: any) {
-                    setVerifyError(
-                      e?.shortMessage || e?.message || "Ошибка подтверждения"
-                    );
-                  }
-                  setVerifyLoading(false);
-                }}
-              >
-                {verifyLoading
-                  ? "Подтверждение..."
-                  : "Подтвердить пользователя"}
               </Button>
             </div>
           </div>
