@@ -147,7 +147,7 @@ contract GoodVPN is Ownable, ReentrancyGuard {
 
     /// @notice Оплатить VPN услугу с баланса пользователя (только активные пользователи GoodVibe)
     /// @param serverId id сервера
-    function payVPN(uint256 serverId) external nonReentrant onlyActiveUser {
+    function payVPN(uint256 serverId) external nonReentrant {
         ServerVPN storage server = servers[serverId];
         require(server.exists, "Server does not exist");
         require(server.price > 0, "Server price is zero");
@@ -164,29 +164,18 @@ contract GoodVPN is Ownable, ReentrancyGuard {
         // Обновляем подписку пользователя
         subscriptions[msg.sender][serverId].expiration = block.timestamp + server.expiration;
 
-        // Распределяем оставшуюся сумму по реферальной программе
-        uint256 toDistribute = server.price;
-        _distributeReferralRewards(msg.sender, toDistribute);
-
-        emit VPNPaid(msg.sender, serverId, subscriptions[msg.sender][serverId].expiration, totalAmount, commissionAmount);
-    }
-
-    /// @dev Внутренняя функция распределения комиссионных по реферальной программе
-    function _distributeReferralRewards(address user, uint256 amount) internal {
         // Комиссионные по уровням: [30, 10, 5, 5, 5, 5, 10, 30]
         uint256[8] memory percents = [uint256(30), 10, 5, 5, 5, 5, 10, 30];
-        address current = user;
+        address current = msg.sender;
         address founder = IGoodVibe(goodVibe).getFounder(); // Получаем адрес основателя
-        
         for (uint256 level = 0; level < 8; level++) {
             // Получаем данные пользователя из GoodVibe
             IGoodVibe.User memory userData = IGoodVibe(goodVibe).users(current);
-            
             // Если дошли до пользователя без реферера
             if (userData.referrer == address(0)) {
                 // Если это основатель — начисляем ему награду
                 if (current == founder && userData.status == IGoodVibe.UserStatus.Active) {
-                    uint256 reward = (amount * percents[level]) / 100;
+                    uint256 reward = (server.price * percents[level]) / 100;
                     // Начисляем на баланс основателя
                     balances[current] += reward;
                 }
@@ -194,12 +183,14 @@ contract GoodVPN is Ownable, ReentrancyGuard {
             }
             // Проверяем, что реферер активен (статус Active)
             if (userData.status == IGoodVibe.UserStatus.Active) {
-                uint256 reward = (amount * percents[level]) / 100;
+                uint256 reward = (server.price * percents[level]) / 100;
                 // Начисляем на баланс реферера
                 balances[userData.referrer] += reward;
             }
             current = userData.referrer;
         }
+
+        emit VPNPaid(msg.sender, serverId, subscriptions[msg.sender][serverId].expiration, totalAmount, commissionAmount);
     }
 
     /// @dev Проверка, есть ли у пользователя активная подписка хотя бы на один сервер

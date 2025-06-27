@@ -23,7 +23,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { mnemonicToAccount } from "viem/accounts";
+import { mnemonicToAccount, privateKeyToAccount } from "viem/accounts";
 import { encryptData } from "../utils/crypto";
 
 const languages = [
@@ -69,6 +69,8 @@ export default function Login() {
   const [importPin, setImportPin] = useState("");
   const [importError, setImportError] = useState("");
   const [importLoading, setImportLoading] = useState(false);
+  const [importType, setImportType] = useState<"seed" | "privateKey">("seed");
+  const [importPrivKey, setImportPrivKey] = useState("");
 
   useEffect(() => {
     setSessions(getSessions());
@@ -310,47 +312,185 @@ export default function Login() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-2 sm:px-0">
           <div className="bg-white dark:bg-zinc-900 rounded-lg p-4 sm:p-6 w-full max-w-xs sm:max-w-sm shadow-lg max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold mb-4">Импорт кошелька</h2>
-            {importStep < 12 ? (
-              <>
-                <div className="mb-2 text-sm text-muted-foreground">
-                  Введите слово {importStep + 1} из 12
-                </div>
-                <Input
-                  autoFocus
-                  className="mb-4"
-                  value={importSeed[importStep]}
-                  onChange={(e) => {
-                    const arr = [...importSeed];
-                    arr[importStep] = e.target.value.trim().toLowerCase();
-                    setImportSeed(arr);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && importSeed[importStep]) {
-                      setImportStep(importStep + 1);
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant={importType === "seed" ? "secondary" : "outline"}
+                onClick={() => setImportType("seed")}
+                className="flex-1"
+              >
+                Seed-фраза
+              </Button>
+              <Button
+                variant={importType === "privateKey" ? "secondary" : "outline"}
+                onClick={() => setImportType("privateKey")}
+                className="flex-1"
+              >
+                Приватный ключ
+              </Button>
+            </div>
+            {importType === "seed" ? (
+              importStep < 12 ? (
+                <>
+                  <div className="mb-2 text-sm text-muted-foreground">
+                    Введите слово {importStep + 1} из 12
+                  </div>
+                  <Input
+                    autoFocus
+                    className="mb-4"
+                    value={importSeed[importStep]}
+                    onChange={(e) => {
+                      const arr = [...importSeed];
+                      arr[importStep] = e.target.value.trim().toLowerCase();
+                      setImportSeed(arr);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && importSeed[importStep]) {
+                        setImportStep(importStep + 1);
+                      }
+                    }}
+                    placeholder={`Слово ${importStep + 1}`}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (importStep > 0) setImportStep(importStep - 1);
+                      }}
+                      disabled={importStep === 0}
+                    >
+                      Назад
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        if (importSeed[importStep])
+                          setImportStep(importStep + 1);
+                      }}
+                      disabled={!importSeed[importStep]}
+                    >
+                      Далее
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setImportError("");
+                    setImportLoading(true);
+                    try {
+                      if (importSeed.some((w) => !w)) {
+                        setImportError("Введите все 12 слов");
+                        setImportLoading(false);
+                        return;
+                      }
+                      if (!importName.trim()) {
+                        setImportError("Введите название сессии");
+                        setImportLoading(false);
+                        return;
+                      }
+                      if (importPin.length < 6) {
+                        setImportError("Пин-код минимум 6 цифр");
+                        setImportLoading(false);
+                        return;
+                      }
+                      const phrase = importSeed.join(" ").trim();
+                      const account = mnemonicToAccount(phrase);
+                      const privKey = account.getHdKey().privateKey;
+                      let hexPrivKey = "";
+                      if (privKey) {
+                        hexPrivKey = Array.from(privKey)
+                          .map((b) => b.toString(16).padStart(2, "0"))
+                          .join("");
+                      }
+                      const userData = {
+                        name: importName,
+                        lang,
+                        seed: phrase,
+                        privateKey: hexPrivKey,
+                        address: account.address,
+                      };
+                      const enc = await encryptData(
+                        JSON.stringify(userData),
+                        importPin
+                      );
+                      localStorage.setItem(
+                        `goodvibe_userdata_${account.address}`,
+                        enc
+                      );
+                      // Добавляем сессию в список
+                      const sessionsRaw =
+                        localStorage.getItem("goodvibe_sessions");
+                      let sessionsArr: {
+                        id: string;
+                        name: string;
+                        created: string;
+                      }[] = [];
+                      try {
+                        if (sessionsRaw) sessionsArr = JSON.parse(sessionsRaw);
+                      } catch {}
+                      // Удаляем дубликаты по id
+                      const filtered = sessionsArr.filter(
+                        (s) => s.id !== account.address
+                      );
+                      filtered.push({
+                        id: account.address,
+                        name: importName,
+                        created: new Date().toISOString(),
+                      });
+                      localStorage.setItem(
+                        "goodvibe_sessions",
+                        JSON.stringify(filtered)
+                      );
+                      setImportModal(false);
+                      setImportLoading(false);
+                      localStorage.setItem(
+                        "goodvibe_session_id",
+                        account.address
+                      );
+                      localStorage.setItem("goodvibe_pin", importPin);
+                      navigate("/session-pin");
+                    } catch (e) {
+                      setImportError("Ошибка импорта seed-фразы");
+                      setImportLoading(false);
                     }
                   }}
-                  placeholder={`Слово ${importStep + 1}`}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (importStep > 0) setImportStep(importStep - 1);
-                    }}
-                    disabled={importStep === 0}
-                  >
-                    Назад
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      if (importSeed[importStep]) setImportStep(importStep + 1);
-                    }}
-                    disabled={!importSeed[importStep]}
-                  >
-                    Далее
-                  </Button>
-                </div>
-              </>
+                  className="space-y-4"
+                >
+                  <Input
+                    placeholder="Название сессии"
+                    value={importName}
+                    onChange={(e) => setImportName(e.target.value)}
+                    required
+                  />
+                  <Input
+                    placeholder="Пин-код (6+ цифр)"
+                    type="password"
+                    value={importPin}
+                    onChange={(e) =>
+                      setImportPin(e.target.value.replace(/\D/g, ""))
+                    }
+                    minLength={6}
+                    maxLength={12}
+                    required
+                  />
+                  {importError && (
+                    <div className="text-red-500 text-sm">{importError}</div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      type="button"
+                      onClick={() => setImportModal(false)}
+                      disabled={importLoading}
+                    >
+                      Отмена
+                    </Button>
+                    <Button type="submit" disabled={importLoading}>
+                      {importLoading ? "Импорт..." : "Импортировать"}
+                    </Button>
+                  </div>
+                </form>
+              )
             ) : (
               <form
                 onSubmit={async (e) => {
@@ -358,8 +498,24 @@ export default function Login() {
                   setImportError("");
                   setImportLoading(true);
                   try {
-                    if (importSeed.some((w) => !w)) {
-                      setImportError("Введите все 12 слов");
+                    if (!importPrivKey.trim()) {
+                      setImportError("Введите приватный ключ");
+                      setImportLoading(false);
+                      return;
+                    }
+                    let privKey = importPrivKey.trim();
+                    if (privKey.startsWith("0x")) privKey = privKey.slice(2);
+                    if (privKey.length !== 64) {
+                      setImportError(
+                        "Приватный ключ должен содержать 64 символа (без 0x)"
+                      );
+                      setImportLoading(false);
+                      return;
+                    }
+                    if (!/^[0-9a-fA-F]{64}$/.test(privKey)) {
+                      setImportError(
+                        "Приватный ключ должен быть в hex-формате"
+                      );
                       setImportLoading(false);
                       return;
                     }
@@ -373,20 +529,15 @@ export default function Login() {
                       setImportLoading(false);
                       return;
                     }
-                    const phrase = importSeed.join(" ").trim();
-                    const account = mnemonicToAccount(phrase);
-                    const privKey = account.getHdKey().privateKey;
-                    let hexPrivKey = "";
-                    if (privKey) {
-                      hexPrivKey = Array.from(privKey)
-                        .map((b) => b.toString(16).padStart(2, "0"))
-                        .join("");
-                    }
+                    const account = privateKeyToAccount(
+                      (privKey.startsWith("0x")
+                        ? privKey
+                        : "0x" + privKey) as `0x${string}`
+                    );
                     const userData = {
                       name: importName,
                       lang,
-                      seed: phrase,
-                      privateKey: hexPrivKey,
+                      privateKey: privKey,
                       address: account.address,
                     };
                     const enc = await encryptData(
@@ -430,12 +581,19 @@ export default function Login() {
                     localStorage.setItem("goodvibe_pin", importPin);
                     navigate("/session-pin");
                   } catch (e) {
-                    setImportError("Ошибка импорта seed-фразы");
+                    setImportError("Ошибка импорта приватного ключа");
                     setImportLoading(false);
                   }
                 }}
                 className="space-y-4"
               >
+                <Input
+                  placeholder="Приватный ключ (64 hex-символа без 0x)"
+                  value={importPrivKey}
+                  onChange={(e) => setImportPrivKey(e.target.value.trim())}
+                  required
+                  autoComplete="off"
+                />
                 <Input
                   placeholder="Название сессии"
                   value={importName}

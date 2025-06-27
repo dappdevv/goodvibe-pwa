@@ -16,7 +16,7 @@ module.exports = {
     viaIR: true,
     evmVersion: "paris",
   },
-  defaultNetwork: "GoodVibeTestnet",
+  defaultNetwork: "GoodVibe",
   networks: {
     hardhat: {},
     // MAINNET

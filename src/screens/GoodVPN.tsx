@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { type Address } from "viem";
+import GoodVibeAbi from "../blockchain/abi/GoodVibe.json";
+import GoodVibeAddress from "../blockchain/addresses/GoodVibe.json";
 
 export default function GoodVPN() {
   // --- состояния для GoodVPN ---
@@ -64,11 +66,12 @@ export default function GoodVPN() {
   const [depositAmount, setDepositAmount] = useState("");
   const [depositLoading, setDepositLoading] = useState(false);
   // Добавляю хуки состояния для вывода средств
-  const [withdrawAddress, setWithdrawAddress] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawLoading, setWithdrawLoading] = useState(false);
   const [withdrawError, setWithdrawError] = useState("");
   const [withdrawSuccess, setWithdrawSuccess] = useState("");
+  const [userStatus, setUserStatus] = useState<number | null>(null);
+  const [isUserRegistered, setIsUserRegistered] = useState<boolean>(false);
   // Получение адреса пользователя из localStorage
   useEffect(() => {
     const sessionId = localStorage.getItem("goodvibe_session_id");
@@ -203,6 +206,35 @@ export default function GoodVPN() {
       } catch {}
     })();
   }, [userAddress, loading]);
+  // Получение статуса пользователя в GoodVibe
+  useEffect(() => {
+    if (!userAddress) return;
+    (async () => {
+      try {
+        const registered = await publicClient.readContract({
+          address: GoodVibeAddress.address as Address,
+          abi: GoodVibeAbi,
+          functionName: "isUserRegistered",
+          args: [userAddress as Address],
+        });
+        setIsUserRegistered(!!registered);
+        if (registered) {
+          const status = await publicClient.readContract({
+            address: GoodVibeAddress.address as Address,
+            abi: GoodVibeAbi,
+            functionName: "getUserStatus",
+            args: [userAddress as Address],
+          });
+          setUserStatus(Number(status));
+        } else {
+          setUserStatus(null);
+        }
+      } catch {
+        setIsUserRegistered(false);
+        setUserStatus(null);
+      }
+    })();
+  }, [userAddress]);
   // Функция пополнения баланса
   const handleDeposit = async () => {
     setDepositLoading(true);
@@ -290,8 +322,14 @@ export default function GoodVPN() {
         })();
       }, 2000);
     } catch (e: any) {
-      console.error(e);
-      setError(e?.shortMessage || e?.message || "Ошибка покупки VPN");
+      if (
+        e?.message?.includes("User not registered in GoodVibe") ||
+        e?.message?.includes("User not active in GoodVibe")
+      ) {
+        setError("Вы не зарегистрированы или не активны в GoodVibe.");
+      } else {
+        setError(e?.shortMessage || e?.message || "Ошибка покупки VPN");
+      }
     }
     setLoading(false);
   };
@@ -480,7 +518,7 @@ export default function GoodVPN() {
     }
     setCommissionLoading(false);
   };
-  // Обработчик вывода средств
+  // Обновлённый обработчик вывода средств (только сумма)
   const handleWithdraw = async () => {
     setWithdrawLoading(true);
     setWithdrawError("");
@@ -501,13 +539,26 @@ export default function GoodVPN() {
         address: GoodVPNAddress.address as Address,
         abi: GoodVPNAbi,
         functionName: "withdraw",
-        args: [withdrawAddress, parseFloat(withdrawAmount) * 1e18],
+        args: [parseFloat(withdrawAmount) * 1e18],
         chain: walletClient.chain,
         account: walletClient.account ?? null,
       });
       setWithdrawSuccess("Средства успешно выведены!");
-      setWithdrawAddress("");
       setWithdrawAmount("");
+      // Обновить баланс после вывода
+      setTimeout(() => {
+        (async () => {
+          try {
+            const bal = await publicClient.readContract({
+              address: GoodVPNAddress.address as Address,
+              abi: GoodVPNAbi,
+              functionName: "balances",
+              args: [userAddress as Address],
+            });
+            setUserBalance((Number(bal) / 1e18).toFixed(4));
+          } catch {}
+        })();
+      }, 2000);
     } catch (e: any) {
       setWithdrawError(
         e?.shortMessage || e?.message || "Ошибка вывода средств"
@@ -592,6 +643,20 @@ export default function GoodVPN() {
                         <div className="font-bold text-primary">
                           {Number(srv.price) / 1e18} ETH
                         </div>
+                        {!isUserRegistered && userAddress && (
+                          <div className="text-red-500 text-sm mb-2">
+                            Вы не зарегистрированы в GoodVibe. Зарегистрируйтесь
+                            для покупки VPN.
+                          </div>
+                        )}
+                        {isUserRegistered &&
+                          userStatus !== 2 &&
+                          userAddress && (
+                            <div className="text-red-500 text-sm mb-2">
+                              Ваш аккаунт не активен в GoodVibe. Обратитесь в
+                              поддержку.
+                            </div>
+                          )}
                         {userSubscriptions[srv.id] &&
                         userSubscriptions[srv.id] >
                           Math.floor(Date.now() / 1000) ? (
@@ -605,7 +670,9 @@ export default function GoodVPN() {
                           <Button
                             variant="secondary"
                             onClick={() => handleBuyVPN(srv.id)}
-                            disabled={loading}
+                            disabled={
+                              loading || !isUserRegistered || userStatus !== 2
+                            }
                             aria-label="Купить VPN"
                             tabIndex={0}
                           >
@@ -875,15 +942,6 @@ export default function GoodVPN() {
                   )}
                   <div className="flex flex-col gap-2 mb-2">
                     <input
-                      type="text"
-                      className="input input-bordered"
-                      placeholder="Адрес получателя (0x...)"
-                      value={withdrawAddress}
-                      onChange={(e) => setWithdrawAddress(e.target.value)}
-                      aria-label="Адрес получателя"
-                      tabIndex={0}
-                    />
-                    <input
                       type="number"
                       className="input input-bordered"
                       placeholder="Сумма (ETH)"
@@ -898,9 +956,7 @@ export default function GoodVPN() {
                       variant="destructive"
                       className="w-full"
                       onClick={handleWithdraw}
-                      disabled={
-                        withdrawLoading || !withdrawAddress || !withdrawAmount
-                      }
+                      disabled={withdrawLoading || !withdrawAmount}
                       aria-label="Вывести средства"
                       tabIndex={0}
                     >
