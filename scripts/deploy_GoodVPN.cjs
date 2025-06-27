@@ -1,22 +1,26 @@
-// Скрипт деплоя GoodVPN и копирования ABI/адреса для фронта
+// Скрипт деплоя только GoodVPN
 const hre = require("hardhat");
 const fs = require("fs");
 const path = require("path");
 
 async function main() {
-  // Получаем параметры из переменных окружения или задаём по умолчанию
-  const owner =
-    process.env.DEPLOY_OWNER || (await hre.ethers.getSigners())[0].address;
-  const daoServices =
-    process.env.DEPLOY_DAOSERVICES ||
-    (await hre.ethers.getSigners())[1].address;
-  const daoPartnerProgram =
-    process.env.DEPLOY_DAOPARTNERPROGRAM ||
-    (await hre.ethers.getSigners())[2].address;
+  // Получаем адрес GoodVibe из файла
+  const goodVibeAddrPath = path.join(
+    __dirname,
+    "../src/blockchain/addresses/GoodVibe.json"
+  );
+  const goodVibeJson = JSON.parse(fs.readFileSync(goodVibeAddrPath, "utf8"));
+  const goodVibeAddress = goodVibeJson.address;
 
-  // Деплой контракта
+  // Получаем адрес владельца из переменной окружения
+  const owner = process.env.DEPLOY_OWNER;
+  if (!owner) {
+    throw new Error("DEPLOY_OWNER env variable is not set");
+  }
+
+  // Деплой GoodVPN
   const GoodVPN = await hre.ethers.getContractFactory("GoodVPN");
-  const goodVPN = await GoodVPN.deploy(owner, daoPartnerProgram);
+  const goodVPN = await GoodVPN.deploy(owner, goodVibeAddress);
   await goodVPN.waitForDeployment();
   console.log("GoodVPN deployed to:", goodVPN.target);
 
@@ -31,17 +35,15 @@ async function main() {
     "../src/blockchain/addresses/GoodVPN.json"
   );
 
-  // Копируем ABI
+  // Копируем ABI и адрес
   const artifact = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
   fs.writeFileSync(abiDest, JSON.stringify(artifact.abi, null, 2));
-  // Сохраняем адрес
   fs.writeFileSync(
     addrDest,
     JSON.stringify({ address: goodVPN.target }, null, 2)
   );
-
-  console.log("ABI скопирован в:", abiDest);
-  console.log("Адрес скопирован в:", addrDest);
+  console.log(`ABI GoodVPN скопирован в:`, abiDest);
+  console.log(`Адрес GoodVPN скопирован в:`, addrDest);
 }
 
 main()

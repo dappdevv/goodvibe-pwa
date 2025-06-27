@@ -44,6 +44,9 @@ interface IGoodVibe {
 
     /// @notice Получить массив рефералов первого уровня пользователя
     function getFirstLevelReferrals(address user) external view returns (address[] memory);
+
+    /// @notice Получить адрес основателя
+    function getFounder() external view returns (address);
 }
 
 contract GoodVPN is Ownable, ReentrancyGuard {
@@ -173,53 +176,30 @@ contract GoodVPN is Ownable, ReentrancyGuard {
         // Комиссионные по уровням: [30, 10, 5, 5, 5, 5, 10, 30]
         uint256[8] memory percents = [uint256(30), 10, 5, 5, 5, 5, 10, 30];
         address current = user;
+        address founder = IGoodVibe(goodVibe).getFounder(); // Получаем адрес основателя
         
         for (uint256 level = 0; level < 8; level++) {
             // Получаем данные пользователя из GoodVibe
             IGoodVibe.User memory userData = IGoodVibe(goodVibe).users(current);
             
-            if (userData.referrer == address(0)) break; // Нет реферера
-            
+            // Если дошли до пользователя без реферера
+            if (userData.referrer == address(0)) {
+                // Если это основатель — начисляем ему награду
+                if (current == founder && userData.status == IGoodVibe.UserStatus.Active) {
+                    uint256 reward = (amount * percents[level]) / 100;
+                    // Начисляем на баланс основателя
+                    balances[current] += reward;
+                }
+                break;
+            }
             // Проверяем, что реферер активен (статус Active)
             if (userData.status == IGoodVibe.UserStatus.Active) {
                 uint256 reward = (amount * percents[level]) / 100;
-                // Выплата реферального вознаграждения через transfer с try/catch
-                try this._safeTransfer(userData.referrer, reward) {
-                } catch Error(string memory reason) {
-                    revert(string(abi.encodePacked("Referral transfer failed at level ", _uint2str(level), ": ", reason)));
-                } catch {
-                    revert(string(abi.encodePacked("Referral transfer failed at level ", _uint2str(level), ": unknown error")));
-                }
+                // Начисляем на баланс реферера
+                balances[userData.referrer] += reward;
             }
             current = userData.referrer;
         }
-    }
-
-    /// @dev Безопасный transfer с revert reason
-    function _safeTransfer(address to, uint256 amount) external {
-        require(msg.sender == address(this), "Only callable by contract");
-        payable(to).transfer(amount);
-    }
-
-    /// @dev Вспомогательная функция для uint в string
-    function _uint2str(uint256 _i) internal pure returns (string memory) {
-        if (_i == 0) {
-            return "0";
-        }
-        uint256 j = _i;
-        uint256 len;
-        while (j != 0) {
-            len++;
-            j /= 10;
-        }
-        bytes memory bstr = new bytes(len);
-        uint256 k = len;
-        j = _i;
-        while (j != 0) {
-            bstr[--k] = bytes1(uint8(48 + j % 10));
-            j /= 10;
-        }
-        return string(bstr);
     }
 
     /// @dev Проверка, есть ли у пользователя активная подписка хотя бы на один сервер
@@ -237,11 +217,21 @@ contract GoodVPN is Ownable, ReentrancyGuard {
         return subscriptions[user][serverId].expiration;
     }
 
-    /// @notice Вывести средства с контракта (только владелец)
-    function withdraw(address payable to, uint256 amount) external onlyOwner {
+    /// @notice Пользователь может вывести свои средства с баланса
+    function withdraw(uint256 amount) external nonReentrant {
+        require(amount > 0, "Amount must be > 0");
+        require(amount <= balances[msg.sender], "Insufficient user balance");
+        balances[msg.sender] -= amount;
+        (bool success, ) = payable(msg.sender).call{value: amount}("");
+        require(success, "Withdraw failed");
+    }
+
+    /// @notice Владелец может вывести средства с контракта (только для owner)
+    function withdrawOwner(address payable to, uint256 amount) external onlyOwner {
         require(to != address(0), "Invalid address");
         require(amount <= address(this).balance, "Insufficient balance");
-        to.transfer(amount);
+        (bool success, ) = to.call{value: amount}("");
+        require(success, "Withdraw failed");
     }
 
     /// @notice Установить адрес контракта GoodVibe (только владелец)

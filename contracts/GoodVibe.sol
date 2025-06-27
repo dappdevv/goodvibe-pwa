@@ -141,7 +141,7 @@ contract GoodVibe is ReentrancyGuard, Ownable {
             status: UserStatus.Active,
             activity: 100,
             level: 100,
-            referrer: msg.sender,
+            referrer: address(0),
             registered: block.timestamp,
             rating: 5,
             verificationsCount: 100
@@ -403,5 +403,10 @@ contract GoodVibe is ReentrancyGuard, Ownable {
     /// @return статус пользователя (UserStatus)
     function getUserStatus(address user) external view returns (UserStatus) {
         return users[user].status;
+    }
+
+    /// @notice Получить адрес основателя DAO
+    function getFounder() external view returns (address) {
+        return founder;
     }
 }
