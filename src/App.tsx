@@ -11,6 +11,7 @@ import Ai from "./screens/Ai";
 import Contracts from "./screens/Contracts";
 import Docs from "./screens/Docs";
 import GoodVPN from "./screens/GoodVPN";
+import SunoScreen from "./screens/Suno";
 import "./App.css";
 
 function AppContent() {
@@ -31,6 +32,7 @@ function AppContent() {
         <Route path="/ai" element={<Ai />} />
         <Route path="/contracts" element={<Contracts />} />
         <Route path="/docs" element={<Docs />} />
+        <Route path="/suno" element={<SunoScreen />} />
       </Routes>
     </>
   );

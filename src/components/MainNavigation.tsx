@@ -16,6 +16,7 @@ const navItems = [
   { label: "ИИ ассистент", to: "/ai" },
   { label: "Контракты", to: "/contracts" },
   { label: "Документация", to: "/docs" },
+  { label: "Suno API", to: "/suno" },
 ];
 
 export default function MainNavigation() {
