@@ -1,0 +1,247 @@
+{
+  "elementStyling": {
+    "appBackground": {
+      "background": "#181A20",
+      "DO_NOT": [
+        "Do not use gradients or lighter backgrounds for the main app background.",
+        "Do not apply card or button backgrounds to the app root."
+      ]
+    },
+    "cards": {
+      "background": "#23252B",
+      "border": "none",
+      "shadow": "0 4px 24px rgba(0,0,0,0.18)",
+      "borderRadius": "20px",
+      "contentPadding": "24px",
+      "icons": {
+        "fill": "#1ED760",
+        "background": "#23252B"
+      },
+      "DO_NOT": [
+        "Do not apply gradients to card backgrounds.",
+        "Do not use card background for buttons or navigation."
+      ]
+    },
+    "inputs": {
+      "background": "#23252B",
+      "border": "#23252B",
+      "borderRadius": "12px",
+      "text": "#FFFFFF",
+      "placeholder": "#A0A4AB",
+      "icon": {
+        "fill": "#A0A4AB",
+        "background": "none"
+      },
+      "focus": {
+        "border": "#1ED760",
+        "shadow": "0 0 0 2px #1ED76033"
+      },
+      "DO_NOT": [
+        "Do not use gradients or colored backgrounds for input fields.",
+        "Do not use button green for input backgrounds."
+      ]
+    },
+    "buttons": {
+      "primary": {
+        "background": "linear-gradient(90deg, #1ED760 0%, #1ED760 100%)",
+        "text": "#FFFFFF",
+        "icon": "#FFFFFF",
+        "borderRadius": "16px",
+        "shadow": "0 4px 16px rgba(30,215,96,0.18)",
+        "hover": {
+          "background": "linear-gradient(90deg, #1ED760 0%, #17b85b 100%)"
+        },
+        "active": {
+          "background": "#17b85b"
+        },
+        "disabled": {
+          "background": "#23252B",
+          "text": "#A0A4AB"
+        },
+        "focus": {
+          "outline": "2px solid #1ED760"
+        }
+      },
+      "secondary": {
+        "background": "#23252B",
+        "text": "#FFFFFF",
+        "border": "none",
+        "hover": {
+          "background": "#23252B"
+        },
+        "active": {
+          "background": "#181A20"
+        },
+        "disabled": {
+          "background": "#23252B",
+          "text": "#A0A4AB"
+        }
+      },
+      "DO_NOT": [
+        "Do not use gradients on secondary or text buttons.",
+        "Do not use primary button green for text or card backgrounds."
+      ]
+    },
+    "checkboxes": {
+      "background": "#23252B",
+      "border": "#1ED760",
+      "checkedBackground": "#1ED760",
+      "checkmark": "#181A20",
+      "focus": {
+        "outline": "2px solid #1ED760"
+      }
+    },
+    "switches": {
+      "track": "#23252B",
+      "thumb": "#1ED760",
+      "checkedTrack": "#1ED760",
+      "checkedThumb": "#181A20"
+    },
+    "icons": {
+      "primary": "#1ED760",
+      "secondary": "#A0A4AB",
+      "container": "transparent",
+      "DO_NOT": [
+        "Do not use gradients or card backgrounds for icons.",
+        "Do not use button backgrounds for icons."
+      ]
+    },
+    "navigation": {
+      "background": "#181A20",
+      "iconActive": "#1ED760",
+      "iconInactive": "#A0A4AB",
+      "textActive": "#FFFFFF",
+      "textInactive": "#A0A4AB",
+      "indicator": "#1ED760",
+      "DO_NOT": [
+        "Do not use gradients or card backgrounds for navigation bar.",
+        "Do not use button backgrounds for navigation icons."
+      ]
+    },
+    "modals": {
+      "background": "#23252B",
+      "borderRadius": "24px",
+      "shadow": "0 8px 32px rgba(0,0,0,0.32)",
+      "contentPadding": "32px"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A0A4AB",
+      "tertiary": "#6B6F76",
+      "inverse": "#181A20",
+      "success": "#1ED760",
+      "error": "#FF4D4F",
+      "heading": {
+        "color": "#FFFFFF",
+        "fontWeight": "700"
+      },
+      "subheading": {
+        "color": "#A0A4AB",
+        "fontWeight": "500"
+      },
+      "DO_NOT": [
+        "Do not use button or card backgrounds for text.",
+        "Do not use gradients for text except for special headings."
+      ]
+    },
+    "gradients": {
+      "cardCovers": {
+        "background": "linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)",
+        "direction": "135deg"
+      },
+      "categoryTiles": {
+        "backgrounds": [
+          "linear-gradient(135deg, #1ED760 0%, #1ED760 100%)",
+          "linear-gradient(135deg, #FF6B6B 0%, #FFD93D 100%)",
+          "linear-gradient(135deg, #4ECDC4 0%, #556270 100%)",
+          "linear-gradient(135deg, #FF6B6B 0%, #FFD93D 100%)"
+        ]
+      },
+      "DO_NOT": [
+        "Do not use gradients for input, button, or card backgrounds except for cover art and category tiles."
+      ]
+    },
+    "shadows": {
+      "card": "0 4px 24px rgba(0,0,0,0.18)",
+      "button": "0 4px 16px rgba(30,215,96,0.18)",
+      "modal": "0 8px 32px rgba(0,0,0,0.32)",
+      "DO_NOT": ["Do not apply shadows to text or icons."]
+    },
+    "borders": {
+      "input": "#23252B",
+      "button": "none",
+      "card": "none",
+      "DO_NOT": [
+        "Do not use visible borders on cards or buttons except for focus/active states."
+      ]
+    },
+    "borderRadius": {
+      "card": "20px",
+      "button": "16px",
+      "input": "12px",
+      "modal": "24px",
+      "avatar": "50%",
+      "DO_NOT": [
+        "Do not use sharp corners on any interactive or card elements."
+      ]
+    },
+    "stateMapping": {
+      "button": {
+        "default": {
+          "background": "linear-gradient(90deg, #1ED760 0%, #1ED760 100%)",
+          "text": "#FFFFFF"
+        },
+        "hover": {
+          "background": "linear-gradient(90deg, #1ED760 0%, #17b85b 100%)"
+        },
+        "active": {
+          "background": "#17b85b"
+        },
+        "disabled": {
+          "background": "#23252B",
+          "text": "#A0A4AB"
+        },
+        "focus": {
+          "outline": "2px solid #1ED760"
+        }
+      },
+      "input": {
+        "default": {
+          "background": "#23252B",
+          "border": "#23252B"
+        },
+        "focus": {
+          "border": "#1ED760",
+          "shadow": "0 0 0 2px #1ED76033"
+        },
+        "disabled": {
+          "background": "#181A20",
+          "text": "#6B6F76"
+        }
+      },
+      "checkbox": {
+        "default": {
+          "background": "#23252B",
+          "border": "#1ED760"
+        },
+        "checked": {
+          "background": "#1ED760",
+          "checkmark": "#181A20"
+        },
+        "focus": {
+          "outline": "2px solid #1ED760"
+        }
+      },
+      "navigationIcon": {
+        "default": "#A0A4AB",
+        "active": "#1ED760"
+      }
+    }
+  },
+  "DO_NOT": [
+    "Do not apply gradients to backgrounds except for cover art and category tiles.",
+    "Do not use button or card backgrounds for text, icons, or navigation.",
+    "Do not use shadows on text or icons.",
+    "Do not use sharp corners on any interactive or card elements."
+  ]
+}
