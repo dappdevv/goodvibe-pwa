@@ -60,8 +60,6 @@ export default function Login() {
     name: string;
     created: string;
   }>(null);
-  const [installPrompt, setInstallPrompt] = useState<any>(null);
-  const [showInstall, setShowInstall] = useState(false);
   const [importModal, setImportModal] = useState(false);
   const [importStep, setImportStep] = useState(0);
   const [importSeed, setImportSeed] = useState<string[]>(Array(12).fill(""));
@@ -83,16 +81,6 @@ export default function Login() {
       document.documentElement.classList.remove("dark");
     }
   }, [dark]);
-
-  useEffect(() => {
-    function handler(e: any) {
-      e.preventDefault();
-      setInstallPrompt(e);
-      setShowInstall(true);
-    }
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,32 +110,6 @@ export default function Login() {
           </div>
         </CardHeader>
         <CardContent>
-          {showInstall && (
-            <AlertDialog open={showInstall} onOpenChange={setShowInstall}>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Установить приложение?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Вы хотите установить GOOD VIBE DAO как PWA?
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Отмена</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={async () => {
-                      if (installPrompt) {
-                        installPrompt.prompt();
-                        await installPrompt.userChoice;
-                        setShowInstall(false);
-                      }
-                    }}
-                  >
-                    Установить
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
           {sessions.length > 0 && (
             <div className="mb-6">
               <div className="font-semibold text-base mb-2 text-muted-foreground">

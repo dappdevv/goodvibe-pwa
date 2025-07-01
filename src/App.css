@@ -4,3 +4,8 @@
   padding: 2rem;
   text-align: center;
 } */
+.pattaya-regular {
+  font-family: "Pattaya", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}

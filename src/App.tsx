@@ -12,11 +12,18 @@ import Contracts from "./screens/Contracts";
 import Docs from "./screens/Docs";
 import GoodVPN from "./screens/GoodVPN";
 import SunoScreen from "./screens/Suno";
+import WelcomePage from "./components/WelcomePage";
 import "./App.css";
+import { useState } from "react";
 
 function AppContent() {
   const location = useLocation();
   const hideMenu = location.pathname === "/" || location.pathname === "/seed";
+  // Состояние для отображения приветственной страницы
+  const [showWelcome, setShowWelcome] = useState(() => {
+    // Проверяем localStorage при инициализации
+    return localStorage.getItem("hideWelcome") !== "true";
+  });
   return (
     <>
       {!hideMenu && <MainNavigation />}
@@ -34,6 +41,8 @@ function AppContent() {
         <Route path="/docs" element={<Docs />} />
         <Route path="/suno" element={<SunoScreen />} />
       </Routes>
+      {/* Если нужно показать приветственную страницу — показываем её поверх всего */}
+      {showWelcome && <WelcomePage onContinue={() => setShowWelcome(false)} />}
     </>
   );
 }
